@@ -1,5 +1,6 @@
 import React from 'react';
-import { Search, Bell, Menu } from 'lucide-react';
+import { Search, Menu } from 'lucide-react';
+import NotificationDropdown from '../Notifications/NotificationDropdown';
 
 const TopBar = ({ onMenuClick }) => {
     return (
@@ -25,10 +26,7 @@ const TopBar = ({ onMenuClick }) => {
 
             <div className="flex items-center gap-4">
                 {/* Notifications */}
-                <button className="relative p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors">
-                    <Bell size={20} />
-                    <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
-                </button>
+                <NotificationDropdown />
 
                 {/* User Profile */}
                 <div className="flex items-center gap-3 pl-4 border-l border-gray-200">

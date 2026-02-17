@@ -11,6 +11,12 @@ import DashboardLayout from './components/Dashboard/DashboardLayout';
 import DashboardHome from './components/Dashboard/DashboardHome';
 import Profile from './components/Profile/Profile';
 import CreateProject from './components/CreateProject/CreateProject';
+import ProjectDetails from './components/ProjectDetails/ProjectDetails';
+import FindTeammates from './components/FindTeammates/FindTeammates';
+import MyProjects from './components/MyProjects/MyProjects';
+import ChatLayout from './components/Chat/ChatLayout';
+import MatchInsights from './components/MatchInsights/MatchInsights';
+import NotificationsPage from './components/Notifications/NotificationsPage';
 import './App.css';
 
 function ScrollToAnchor() {
@@ -71,6 +77,54 @@ function App() {
           element={
             <DashboardLayout>
               <CreateProject />
+            </DashboardLayout>
+          }
+        />
+        <Route
+          path="/project/:id"
+          element={
+            <DashboardLayout>
+              <ProjectDetails />
+            </DashboardLayout>
+          }
+        />
+        <Route
+          path="/find-teammates"
+          element={
+            <DashboardLayout>
+              <FindTeammates />
+            </DashboardLayout>
+          }
+        />
+        <Route
+          path="/projects"
+          element={
+            <DashboardLayout>
+              <MyProjects />
+            </DashboardLayout>
+          }
+        />
+        <Route
+          path="/chat"
+          element={
+            <DashboardLayout>
+              <ChatLayout />
+            </DashboardLayout>
+          }
+        />
+        <Route
+          path="/insights"
+          element={
+            <DashboardLayout>
+              <MatchInsights />
+            </DashboardLayout>
+          }
+        />
+        <Route
+          path="/notifications"
+          element={
+            <DashboardLayout>
+              <NotificationsPage />
             </DashboardLayout>
           }
         />

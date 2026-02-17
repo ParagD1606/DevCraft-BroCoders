@@ -76,7 +76,11 @@ const DashboardHome = () => {
                         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                             <div className="divide-y divide-gray-100">
                                 {activeProjects.map((project, index) => (
-                                    <div key={index} className="p-4 hover:bg-gray-50 transition-colors flex items-center justify-between group">
+                                    <div
+                                        key={index}
+                                        onClick={() => navigate(`/project/${index + 1}`)}
+                                        className="p-4 hover:bg-gray-50 transition-colors flex items-center justify-between group cursor-pointer"
+                                    >
                                         <div className="flex items-center gap-4">
                                             <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 font-bold">
                                                 {project.title.charAt(0)}
@@ -149,6 +153,7 @@ const DashboardHome = () => {
                                     initial={{ opacity: 0, x: 20 }}
                                     animate={{ opacity: 1, x: 0 }}
                                     transition={{ delay: 0.2 + (index * 0.1) }}
+                                    onClick={() => navigate(`/project/${index + 10}`)}
                                     className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer"
                                 >
                                     <div className="flex justify-between items-start mb-2">
