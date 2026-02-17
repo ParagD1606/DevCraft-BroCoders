@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mail, Lock, Eye, EyeOff, Loader2, Github, ArrowRight } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
+import { apiRequest } from '../config/api';
 
 const Auth = () => {
     const [isLogin, setIsLogin] = useState(true);
@@ -13,11 +14,13 @@ const Auth = () => {
         confirmPassword: '',
     });
     const [errors, setErrors] = useState({});
+    const [authError, setAuthError] = useState('');
     const navigate = useNavigate();
 
     const toggleMode = () => {
         setIsLogin(!isLogin);
         setErrors({});
+        setAuthError('');
         setFormData({ email: '', password: '', confirmPassword: '' });
     };
 
@@ -27,7 +30,7 @@ const Auth = () => {
         else if (!/\S+@\S+\.\S/.test(formData.email)) newErrors.email = 'Email is invalid';
 
         if (!formData.password) newErrors.password = 'Password is required';
-        else if (formData.password.length < 6) newErrors.password = 'Password must be at least 6 characters';
+        else if (formData.password.length < 8) newErrors.password = 'Password must be at least 8 characters';
 
         if (!isLogin && formData.password !== formData.confirmPassword) {
             newErrors.confirmPassword = 'Passwords do not match';
@@ -39,21 +42,40 @@ const Auth = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (validate()) {
-            setLoading(true);
-            // Simulate API call
-            setTimeout(() => {
-                setLoading(false);
-                console.log('Form submitted:', formData);
+        if (!validate()) {
+            return;
+        }
 
-                if (!isLogin) {
-                    // Redirect to onboarding on successful sign up
-                    navigate('/onboarding');
-                } else {
-                    // Redirect to dashboard on login
-                    navigate('/dashboard');
-                }
-            }, 2000);
+        try {
+            setLoading(true);
+            setAuthError('');
+
+            const endpoint = isLogin ? '/api/auth/login' : '/api/auth/signup';
+            const payload = isLogin
+                ? { email: formData.email, password: formData.password }
+                : {
+                    email: formData.email,
+                    password: formData.password,
+                    confirmPassword: formData.confirmPassword,
+                };
+
+            const response = await apiRequest(endpoint, {
+                method: 'POST',
+                body: JSON.stringify(payload),
+            });
+
+            localStorage.setItem('authToken', response.token);
+            localStorage.setItem('authUser', JSON.stringify(response.user));
+
+            if (!isLogin) {
+                navigate('/onboarding');
+            } else {
+                navigate('/dashboard');
+            }
+        } catch (error) {
+            setAuthError(error.message || 'Authentication failed');
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -187,6 +209,9 @@ const Auth = () => {
                                 </>
                             )}
                         </button>
+                        {authError && (
+                            <p className="text-red-500 text-sm text-center -mt-2">{authError}</p>
+                        )}
 
                         <div className="relative my-8">
                             <div className="absolute inset-0 flex items-center">
