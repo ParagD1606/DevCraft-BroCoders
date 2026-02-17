@@ -225,6 +225,7 @@ const Auth = () => {
                         <div className="grid grid-cols-2 gap-4">
                             <button
                                 type="button"
+                                onClick={() => window.location.href = 'http://localhost:5000/api/auth/google'}
                                 className="flex items-center justify-center px-4 py-2 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
                             >
                                 <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="h-5 w-5 mr-2" />

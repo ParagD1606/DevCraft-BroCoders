@@ -77,6 +77,11 @@ router.post('/login', async (req, res) => {
     return res.status(401).json({ error: 'Invalid email or password' });
   }
 
+  // Check if user has a password set (OAuth users might not)
+  if (!user.passwordHash) {
+    return res.status(401).json({ error: 'This account uses social login. Please sign in with Google or GitHub.' });
+  }
+
   const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
   if (!isPasswordValid) {
     return res.status(401).json({ error: 'Invalid email or password' });
@@ -137,6 +142,45 @@ router.get(
 
     // Redirect to frontend with token
     // In production, consider a more secure way (e.g., cookie or short-lived code exchanging for token)
+    res.redirect(`http://localhost:5173/oauth/callback?token=${token}&user=${encodeURIComponent(JSON.stringify({ id: user.id, email: user.email, createdAt: user.createdAt }))}`);
+  }
+);
+
+// Google OAuth Routes
+router.get(
+  '/google',
+  passport.authenticate('google', { scope: ['profile', 'email'] })
+);
+
+router.get(
+  '/google/callback',
+  passport.authenticate('google', { session: false, failureRedirect: 'http://localhost:5173/auth?error=google_failed' }),
+  async (req, res) => {
+    const profile = req.user;
+    const email = profile.emails && profile.emails[0] ? profile.emails[0].value : null;
+
+    if (!email) {
+      return res.redirect('http://localhost:5173/auth?error=no_email_from_google');
+    }
+
+    const normalizedEmail = normalizeEmail(email);
+    let user = await User.findOne({ email: normalizedEmail });
+
+    if (!user) {
+      user = await User.create({
+        email: normalizedEmail,
+        googleId: profile.id,
+      });
+    } else if (!user.googleId) {
+      // If user exists but doesn't have googleId, link it
+      user.googleId = profile.id;
+      await user.save();
+    }
+
+    const token = jwt.sign({ sub: user.id, email: user.email }, getJwtSecret(), {
+      expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+    });
+
     res.redirect(`http://localhost:5173/oauth/callback?token=${token}&user=${encodeURIComponent(JSON.stringify({ id: user.id, email: user.email, createdAt: user.createdAt }))}`);
   }
 );

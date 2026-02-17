@@ -15,14 +15,19 @@ const userSchema = new mongoose.Schema({
     passwordHash: {
         type: String,
         required: function () {
-            // Password is required only if githubId is not present
-            return !this.githubId;
+            // Password is required only if neither githubId nor googleId is present
+            return !this.githubId && !this.googleId;
         }
     },
     githubId: {
         type: String,
         unique: true,
         sparse: true // Allows multiple documents to have no githubId (null/undefined)
+    },
+    googleId: {
+        type: String,
+        unique: true,
+        sparse: true
     },
     createdAt: {
         type: Date,
