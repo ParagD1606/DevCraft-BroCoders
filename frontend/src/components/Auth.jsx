@@ -232,6 +232,7 @@ const Auth = () => {
                             </button>
                             <button
                                 type="button"
+                                onClick={() => window.location.href = 'http://localhost:5000/api/auth/github'}
                                 className="flex items-center justify-center px-4 py-2 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
                             >
                                 <Github className="h-5 w-5 mr-2 text-gray-900" />

@@ -16,6 +16,9 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+const passport = require('./config/passportConfig');
+app.use(passport.initialize());
+
 app.get('/health', (_req, res) => {
   res.status(200).json({
     status: 'ok',

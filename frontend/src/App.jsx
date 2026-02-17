@@ -6,6 +6,7 @@ import Features from './components/Features';
 import HowItWorks from './components/HowItWorks';
 import Footer from './components/Footer';
 import Auth from './components/Auth';
+import OAuthCallback from './components/OAuthCallback';
 import Onboarding from './components/Onboarding/Onboarding';
 import DashboardLayout from './components/Dashboard/DashboardLayout';
 import DashboardHome from './components/Dashboard/DashboardHome';
@@ -55,6 +56,7 @@ function App() {
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/auth" element={<Auth />} />
+        <Route path="/oauth/callback" element={<OAuthCallback />} />
         <Route path="/onboarding" element={<Onboarding />} />
         <Route
           path="/dashboard"

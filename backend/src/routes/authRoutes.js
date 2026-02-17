@@ -2,6 +2,7 @@ const express = require('express');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const passport = require('passport');
 
 const usersByEmail = new Map();
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -96,5 +97,54 @@ router.post('/login', async (req, res) => {
     },
   });
 });
+
+
+// GitHub OAuth Routes
+router.get(
+  '/github',
+  passport.authenticate('github', { scope: ['user:email'] })
+);
+
+router.get(
+  '/github/callback',
+  passport.authenticate('github', { session: false, failureRedirect: 'http://localhost:5173/auth?error=github_failed' }),
+  async (req, res) => {
+    // req.user contains the profile returned by GitHub
+    const profile = req.user;
+
+    // Get email from profile
+    // GitHub profile emails might be in emails array if private
+    let email = profile.emails && profile.emails[0] ? profile.emails[0].value : null;
+
+    if (!email) {
+      return res.redirect('http://localhost:5173/auth?error=no_email_from_github');
+    }
+
+    const normalizedEmail = normalizeEmail(email);
+    let user = usersByEmail.get(normalizedEmail);
+
+    if (!user) {
+      // Create new user for GitHub login
+      user = {
+        id: crypto.randomUUID(),
+        email: normalizedEmail,
+        // No password hash for OAuth users, or we could set a dummy one
+        passwordHash: null,
+        githubId: profile.id,
+        createdAt: new Date().toISOString(),
+      };
+      usersByEmail.set(normalizedEmail, user);
+    }
+
+    // Generate Token
+    const token = jwt.sign({ sub: user.id, email: user.email }, getJwtSecret(), {
+      expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+    });
+
+    // Redirect to frontend with token
+    // In production, consider a more secure way (e.g., cookie or short-lived code exchanging for token)
+    res.redirect(`http://localhost:5173/oauth/callback?token=${token}&user=${encodeURIComponent(JSON.stringify({ id: user.id, email: user.email, createdAt: user.createdAt }))}`);
+  }
+);
 
 module.exports = router;
