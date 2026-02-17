@@ -4,7 +4,8 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const passport = require('passport');
 
-const usersByEmail = new Map();
+const User = require('../models/User');
+// const usersByEmail = new Map(); // Removed in-memory storage
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const router = express.Router();
@@ -37,18 +38,16 @@ router.post('/signup', async (req, res) => {
   }
 
   const normalizedEmail = normalizeEmail(email);
-  if (usersByEmail.has(normalizedEmail)) {
+  const userExists = await User.findOne({ email: normalizedEmail });
+  if (userExists) {
     return res.status(409).json({ error: 'An account with this email already exists' });
   }
 
   const passwordHash = await bcrypt.hash(password, 12);
-  const user = {
-    id: crypto.randomUUID(),
+  const user = await User.create({
     email: normalizedEmail,
     passwordHash,
-    createdAt: new Date().toISOString(),
-  };
-  usersByEmail.set(normalizedEmail, user);
+  });
 
   const token = jwt.sign({ sub: user.id, email: user.email }, getJwtSecret(), {
     expiresIn: process.env.JWT_EXPIRES_IN || '7d',
@@ -73,7 +72,7 @@ router.post('/login', async (req, res) => {
   }
 
   const normalizedEmail = normalizeEmail(email);
-  const user = usersByEmail.get(normalizedEmail);
+  const user = await User.findOne({ email: normalizedEmail });
   if (!user) {
     return res.status(401).json({ error: 'Invalid email or password' });
   }
@@ -121,19 +120,14 @@ router.get(
     }
 
     const normalizedEmail = normalizeEmail(email);
-    let user = usersByEmail.get(normalizedEmail);
+    let user = await User.findOne({ email: normalizedEmail });
 
     if (!user) {
       // Create new user for GitHub login
-      user = {
-        id: crypto.randomUUID(),
+      user = await User.create({
         email: normalizedEmail,
-        // No password hash for OAuth users, or we could set a dummy one
-        passwordHash: null,
         githubId: profile.id,
-        createdAt: new Date().toISOString(),
-      };
-      usersByEmail.set(normalizedEmail, user);
+      });
     }
 
     // Generate Token
