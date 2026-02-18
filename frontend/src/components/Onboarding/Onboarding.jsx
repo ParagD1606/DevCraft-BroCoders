@@ -1,26 +1,72 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, ChevronRight, Check } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { ChevronLeft, ChevronRight, Check, Loader2 } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import Step0BasicInfo from './Step0BasicInfo';
 import Step1Skills from './Step1Skills';
 import Step2GitHub from './Step2GitHub';
 import Step3Availability from './Step3Availability';
 import Step4Interests from './Step4Interests';
 
 const Onboarding = () => {
+    const navigate = useNavigate();
     const [currentStep, setCurrentStep] = useState(1);
+    const [isSubmitting, setIsSubmitting] = useState(false);
     const [formData, setFormData] = useState({
+        name: '',
+        age: '',
+        qualifications: '',
         skills: [],
         githubConnected: false,
         availability: {},
         interests: [],
     });
 
-    const totalSteps = 4;
+    const totalSteps = 5;
 
-    const handleNext = () => {
-        if (currentStep < totalSteps + 1) { // +1 for completion screen check if needed, but Step 4 is last input step
+    const handleNext = async () => {
+        if (currentStep < totalSteps) {
             setCurrentStep(curr => curr + 1);
+        } else if (currentStep === totalSteps) {
+            await handleFinish();
+        }
+    };
+
+    const handleFinish = async () => {
+        setIsSubmitting(true);
+        try {
+            const token = localStorage.getItem('authToken');
+            const response = await fetch('http://localhost:5000/api/user/profile', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    name: formData.name,
+                    age: Number(formData.age),
+                    qualifications: formData.qualifications,
+                    skills: formData.skills,
+                    interests: formData.interests,
+                    availability: formData.availability,
+                    onboardingCompleted: true
+                })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                localStorage.setItem('authUser', JSON.stringify(data.user));
+                setCurrentStep(curr => curr + 1); // Go to completion screen
+            } else {
+                const errorData = await response.json();
+                console.error('Failed to update profile:', errorData);
+                alert(`Failed to complete onboarding: ${errorData.error || 'Unknown error'}`);
+            }
+        } catch (error) {
+            console.error('Error submitting onboarding:', error);
+            alert(`Error submitting onboarding: ${error.message}`);
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -37,12 +83,14 @@ const Onboarding = () => {
     const renderStep = () => {
         switch (currentStep) {
             case 1:
-                return <Step1Skills formData={formData} updateFormData={updateFormData} />;
+                return <Step0BasicInfo formData={formData} updateFormData={updateFormData} />;
             case 2:
-                return <Step2GitHub formData={formData} updateFormData={updateFormData} />;
+                return <Step1Skills formData={formData} updateFormData={updateFormData} />;
             case 3:
-                return <Step3Availability formData={formData} updateFormData={updateFormData} />;
+                return <Step2GitHub formData={formData} updateFormData={updateFormData} />;
             case 4:
+                return <Step3Availability formData={formData} updateFormData={updateFormData} />;
+            case 5:
                 return <Step4Interests formData={formData} updateFormData={updateFormData} />;
             default:
                 return <div className="text-center py-20">
@@ -96,7 +144,7 @@ const Onboarding = () => {
                     <div className="px-8 py-6 bg-gray-50 border-t border-gray-100 flex justify-between">
                         <button
                             onClick={handleBack}
-                            disabled={currentStep === 1}
+                            disabled={currentStep === 1 || isSubmitting}
                             className={`flex items-center px-6 py-2 rounded-xl text-gray-600 font-medium transition-colors ${currentStep === 1 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-200'
                                 }`}
                         >
@@ -105,10 +153,15 @@ const Onboarding = () => {
                         </button>
                         <button
                             onClick={handleNext}
-                            className="flex items-center px-6 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors shadow-md hover:shadow-lg font-medium"
+                            disabled={isSubmitting}
+                            className="flex items-center px-6 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors shadow-md hover:shadow-lg font-medium disabled:opacity-70 disabled:cursor-not-allowed"
                         >
-                            {currentStep === totalSteps ? 'Finish' : 'Next'}
-                            <ChevronRight className="w-5 h-5 ml-1" />
+                            {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : (
+                                <>
+                                    {currentStep === totalSteps ? 'Finish' : 'Next'}
+                                    <ChevronRight className="w-5 h-5 ml-1" />
+                                </>
+                            )}
                         </button>
                     </div>
                 )}

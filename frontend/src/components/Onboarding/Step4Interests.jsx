@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 
 const interests = [
+    'Hackathons',
     'Startup',
     'AI/ML',
     'Web3',
@@ -38,8 +39,8 @@ const Step4Interests = ({ formData, updateFormData }) => {
                             whileTap={{ scale: 0.95 }}
                             onClick={() => toggleInterest(interest)}
                             className={`p-4 rounded-xl text-left border transition-all ${isSelected
-                                    ? 'bg-blue-50 border-blue-500 shadow-md transform scale-[1.02]'
-                                    : 'bg-white border-gray-200 hover:border-blue-200 hover:shadow-sm'
+                                ? 'bg-blue-50 border-blue-500 shadow-md transform scale-[1.02]'
+                                : 'bg-white border-gray-200 hover:border-blue-200 hover:shadow-sm'
                                 }`}
                         >
                             <div

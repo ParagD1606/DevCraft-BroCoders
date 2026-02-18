@@ -59,6 +59,7 @@ router.post('/signup', async (req, res) => {
     user: {
       id: user.id,
       email: user.email,
+      onboardingCompleted: user.onboardingCompleted,
       createdAt: user.createdAt,
     },
   });
@@ -97,6 +98,7 @@ router.post('/login', async (req, res) => {
     user: {
       id: user.id,
       email: user.email,
+      onboardingCompleted: user.onboardingCompleted,
       createdAt: user.createdAt,
     },
   });
@@ -142,7 +144,7 @@ router.get(
 
     // Redirect to frontend with token
     // In production, consider a more secure way (e.g., cookie or short-lived code exchanging for token)
-    res.redirect(`http://localhost:5173/oauth/callback?token=${token}&user=${encodeURIComponent(JSON.stringify({ id: user.id, email: user.email, createdAt: user.createdAt }))}`);
+    res.redirect(`http://localhost:5173/oauth/callback?token=${token}&user=${encodeURIComponent(JSON.stringify({ id: user.id, email: user.email, onboardingCompleted: user.onboardingCompleted, createdAt: user.createdAt }))}`);
   }
 );
 
@@ -181,7 +183,7 @@ router.get(
       expiresIn: process.env.JWT_EXPIRES_IN || '7d',
     });
 
-    res.redirect(`http://localhost:5173/oauth/callback?token=${token}&user=${encodeURIComponent(JSON.stringify({ id: user.id, email: user.email, createdAt: user.createdAt }))}`);
+    res.redirect(`http://localhost:5173/oauth/callback?token=${token}&user=${encodeURIComponent(JSON.stringify({ id: user.id, email: user.email, onboardingCompleted: user.onboardingCompleted, createdAt: user.createdAt }))}`);
   }
 );
 

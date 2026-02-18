@@ -29,6 +29,27 @@ const userSchema = new mongoose.Schema({
         unique: true,
         sparse: true
     },
+    name: {
+        type: String,
+        trim: true
+    },
+    age: {
+        type: Number
+    },
+    qualifications: {
+        type: String,
+        trim: true
+    },
+    onboardingCompleted: {
+        type: Boolean,
+        default: false
+    },
+    skills: [String],
+    interests: [String],
+    availability: {
+        type: Map,
+        of: [String]
+    },
     createdAt: {
         type: Date,
         default: Date.now
