@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { Search } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Search, Loader2 } from 'lucide-react';
 import FilterSidebar from './FilterSidebar';
 import TeammateCard from './TeammateCard';
+import { API_BASE_URL } from '../../config/api';
 
 const FindTeammates = () => {
     const [searchQuery, setSearchQuery] = useState('');
@@ -10,97 +11,54 @@ const FindTeammates = () => {
         availability: [],
         experience: []
     });
+    const [teammates, setTeammates] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
 
-    // Mock Data
-    const teammates = [
-        {
-            id: 1,
-            name: 'Sarah Chen',
-            role: 'Frontend Developer',
-            avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330',
-            matchScore: 98,
-            bio: 'React enthusiast with 5 years of experience. I love building intuitive UIs and working with design systems.',
-            skills: ['React', 'TypeScript', 'Tailwind', 'Figma'],
-            location: 'San Francisco, CA',
-            availability: 'Full-time',
-            experience: 'Senior'
-        },
-        {
-            id: 2,
-            name: 'Michael Ross',
-            role: 'Backend Engineer',
-            avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36',
-            matchScore: 95,
-            bio: 'Scalable systems architect. Experienced with Node.js, Python, and cloud infrastructure.',
-            skills: ['Node.js', 'Python', 'AWS', 'Docker'],
-            location: 'New York, NY',
-            availability: 'Part-time',
-            experience: 'Senior'
-        },
-        {
-            id: 3,
-            name: 'Jessica Lee',
-            role: 'UI/UX Designer',
-            avatar: 'https://images.unsplash.com/photo-1580489944761-15a19d654956',
-            matchScore: 92,
-            bio: 'Designer who codes. I focus on creating accessible and beautiful user experiences.',
-            skills: ['Figma', 'React', 'CSS', 'Prototyping'],
-            location: 'London, UK',
-            availability: 'Full-time',
-            experience: 'Mid-level'
-        },
-        {
-            id: 4,
-            name: 'David Kim',
-            role: 'Full Stack Dev',
-            avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d',
-            matchScore: 88,
-            bio: 'Full stack developer looking for interesting side projects in Web3 or AI.',
-            skills: ['React', 'Solidity', 'Web3', 'Node.js'],
-            location: 'Remote',
-            availability: 'Weekends',
-            experience: 'Mid-level'
-        },
-        {
-            id: 5,
-            name: 'Emily Watson',
-            role: 'Data Scientist',
-            avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80',
-            matchScore: 85,
-            bio: 'Passionate about extracting insights from data. Skilled in Python, SQL, and Machine Learning.',
-            skills: ['Python', 'SQL', 'TensorFlow', 'Data Viz'],
-            location: 'Berlin, DE',
-            availability: 'Part-time',
-            experience: 'Junior'
-        },
-        {
-            id: 6,
-            name: 'James Wilson',
-            role: 'Product Manager',
-            avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e',
-            matchScore: 82,
-            bio: 'Product manager with a technical background. I bridge the gap between business and engineering.',
-            skills: ['Product Strategy', 'Agile', 'Jira', 'Analytics'],
-            location: 'Austin, TX',
-            availability: 'Full-time',
-            experience: 'Senior'
+    const fetchTeammates = async () => {
+        setLoading(true);
+        setError('');
+        try {
+            const token = localStorage.getItem('authToken');
+            const queryParams = new URLSearchParams();
+
+            if (searchQuery) queryParams.append('search', searchQuery);
+            if (filters.skills.length > 0) queryParams.append('skills', filters.skills.join(','));
+            if (filters.availability.length > 0) queryParams.append('availability', filters.availability.join(','));
+            if (filters.experience.length > 0) queryParams.append('experience', filters.experience.join(','));
+
+            const response = await fetch(`${API_BASE_URL}/api/user?${queryParams.toString()}`, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.error || 'Failed to fetch teammates');
+            }
+
+            const data = await response.json();
+            setTeammates(data);
+        } catch (err) {
+            console.error('Error fetching teammates:', err);
+            setError('Failed to load teammates. Please try again later.');
+        } finally {
+            setLoading(false);
         }
-    ];
+    };
 
-    const filteredTeammates = teammates.filter(user => {
-        const matchesSearch = user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            user.role.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            user.skills.some(skill => skill.toLowerCase().includes(searchQuery.toLowerCase()));
+    // Debounce search
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            fetchTeammates();
+        }, 500);
 
-        const matchesSkills = filters.skills.length === 0 || user.skills.some(skill => filters.skills.includes(skill));
-        const matchesAvailability = filters.availability.length === 0 || filters.availability.includes(user.availability);
-        const matchesExperience = filters.experience.length === 0 || filters.experience.includes(user.experience);
-
-        return matchesSearch && matchesSkills && matchesAvailability && matchesExperience;
-    });
+        return () => clearTimeout(timer);
+    }, [searchQuery, filters]);
 
     return (
-        <div className="max-w-7xl 2xl:max-w-screen-2xl mx-auto">
+        <div className="max-w-7xl 2xl:max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             <div className="mb-8">
                 <h1 className="text-3xl font-bold text-gray-900">Find Teammates</h1>
                 <p className="text-gray-500 mt-2">Discover talented developers, designers, and creators for your next project.</p>
@@ -127,17 +85,28 @@ const FindTeammates = () => {
                     </div>
 
                     {/* Results Grid */}
-                    <div className="grid md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6">
-                        {filteredTeammates.length > 0 ? (
-                            filteredTeammates.map(user => (
-                                <TeammateCard key={user.id} user={user} />
-                            ))
-                        ) : (
-                            <div className="col-span-full text-center py-12 text-gray-500">
-                                No teammates found matching your criteria. Try adjusting your filters.
-                            </div>
-                        )}
-                    </div>
+                    {loading ? (
+                        <div className="flex justify-center py-20">
+                            <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+                        </div>
+                    ) : error ? (
+                        <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 text-center">
+                            {error}
+                        </div>
+                    ) : (
+                        <div className="grid md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6">
+                            {teammates.length > 0 ? (
+                                teammates.map(user => (
+                                    <TeammateCard key={user._id} user={user} />
+                                ))
+                            ) : (
+                                <div className="col-span-full text-center py-12 text-gray-500 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+                                    <p className="text-lg font-medium text-gray-900">No teammates found</p>
+                                    <p className="mt-1">Try adjusting your filters or search query.</p>
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

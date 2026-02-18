@@ -60,6 +60,16 @@ const userSchema = new mongoose.Schema({
         type: String,
         trim: true
     },
+    experienceLevel: {
+        type: String,
+        enum: ['Junior', 'Mid-level', 'Senior', 'Expert'],
+        default: 'Junior'
+    },
+    availabilityStatus: {
+        type: String,
+        enum: ['Full-time', 'Part-time', 'Weekends'],
+        default: 'Part-time'
+    },
     onboardingCompleted: {
         type: Boolean,
         default: false

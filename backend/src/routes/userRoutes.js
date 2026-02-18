@@ -168,17 +168,48 @@ router.get('/profile', protect, async (req, res) => {
 // @route   GET /api/user?search=
 // @access  Private
 router.get('/', protect, async (req, res) => {
-    const keyword = req.query.search
-        ? {
-            $or: [
-                { name: { $regex: req.query.search, $options: 'i' } },
-                { email: { $regex: req.query.search, $options: 'i' } },
-            ],
-        }
-        : {};
+    try {
+        const { search, skills, availability, experience } = req.query;
 
-    const users = await User.find(keyword).find({ _id: { $ne: req.user._id } });
-    res.send(users);
+        const query = { _id: { $ne: req.user._id } };
+
+        if (search) {
+            query.$or = [
+                { name: { $regex: search, $options: 'i' } },
+                { email: { $regex: search, $options: 'i' } },
+                { role: { $regex: search, $options: 'i' } },
+                { bio: { $regex: search, $options: 'i' } }
+            ];
+        }
+
+        if (skills) {
+            const skillsArray = skills.split(',').filter(s => s.trim() !== '');
+            if (skillsArray.length > 0) {
+                // Find users who have at least one of the selected skills
+                query.skills = { $in: skillsArray.map(s => new RegExp(`^${s}$`, 'i')) };
+            }
+        }
+
+        if (availability) {
+            const availabilityArray = availability.split(',').filter(s => s.trim() !== '');
+            if (availabilityArray.length > 0) {
+                query.availabilityStatus = { $in: availabilityArray };
+            }
+        }
+
+        if (experience) {
+            const experienceArray = experience.split(',').filter(s => s.trim() !== '');
+            if (experienceArray.length > 0) {
+                query.experienceLevel = { $in: experienceArray };
+            }
+        }
+
+        const users = await User.find(query).select('-passwordHash -githubId -googleId');
+        res.json(users);
+    } catch (error) {
+        console.error('Search users error:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
 });
 
 module.exports = router;

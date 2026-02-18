@@ -1,51 +1,78 @@
 import React from 'react';
-import { UserPlus, Star, MapPin } from 'lucide-react';
+import { UserPlus, MapPin, Briefcase, Clock, Star } from 'lucide-react';
 
 const TeammateCard = ({ user }) => {
+    // Default avatar if none provided
+    const avatarUrl = user.avatar || 'https://icon-library.com/images/anonymous-avatar-icon/anonymous-avatar-icon-25.jpg';
+
     return (
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md hover:border-blue-200 transition-all group">
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md hover:border-blue-200 transition-all group flex flex-col h-full">
             <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-3">
                     <img
-                        src={user.avatar}
+                        src={avatarUrl}
                         alt={user.name}
                         className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-sm"
                     />
                     <div>
                         <h3 className="font-bold text-gray-900 leading-tight">{user.name}</h3>
-                        <p className="text-sm text-blue-600 font-medium">{user.role}</p>
+                        <p className="text-sm text-blue-600 font-medium">{user.role || 'Developer'}</p>
                     </div>
                 </div>
+                {/* Match Score removed for now as it's not calculated in backend yet 
                 <div className="flex items-center gap-1 bg-green-50 px-2 py-1 rounded-full text-xs font-bold text-green-700">
                     <Star size={12} className="fill-current" />
                     {user.matchScore}%
                 </div>
+                */}
             </div>
 
             <p className="text-sm text-gray-600 mb-4 line-clamp-2 min-h-[40px]">
-                {user.bio}
+                {user.bio || 'No bio available.'}
             </p>
 
             <div className="flex flex-wrap gap-2 mb-4">
-                {user.skills.slice(0, 3).map(skill => (
-                    <span key={skill} className="px-2 py-1 bg-gray-50 text-gray-600 text-xs rounded-lg font-medium border border-gray-100">
-                        {skill}
-                    </span>
-                ))}
-                {user.skills.length > 3 && (
-                    <span className="px-2 py-1 bg-gray-50 text-gray-500 text-xs rounded-lg font-medium border border-gray-100">+{user.skills.length - 3}</span>
+                {user.skills && user.skills.length > 0 ? (
+                    <>
+                        {user.skills.slice(0, 3).map((skill, index) => (
+                            <span key={index} className="px-2 py-1 bg-gray-50 text-gray-600 text-xs rounded-lg font-medium border border-gray-100">
+                                {skill}
+                            </span>
+                        ))}
+                        {user.skills.length > 3 && (
+                            <span className="px-2 py-1 bg-gray-50 text-gray-500 text-xs rounded-lg font-medium border border-gray-100">+{user.skills.length - 3}</span>
+                        )}
+                    </>
+                ) : (
+                    <span className="text-xs text-gray-400 italic">No skills listed</span>
                 )}
             </div>
 
-            <div className="flex items-center justify-between pt-4 border-t border-gray-50 mt-auto">
-                <div className="flex items-center text-xs text-gray-400 gap-1">
-                    <MapPin size={12} />
-                    {user.location}
+            <div className="mt-auto space-y-3">
+                <div className="flex items-center justify-between text-xs text-gray-500">
+                    <div className="flex items-center gap-1">
+                        <Briefcase size={12} />
+                        {user.experienceLevel || 'Junior'}
+                    </div>
+                    <div className="flex items-center gap-1">
+                        <Clock size={12} />
+                        {user.availabilityStatus || 'Part-time'}
+                    </div>
                 </div>
-                <button className="flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors">
-                    <UserPlus size={16} />
-                    Connect
-                </button>
+
+                <div className="flex items-center justify-between pt-4 border-t border-gray-50">
+                    <div className="flex items-center text-xs text-gray-400 gap-1">
+                        <MapPin size={12} />
+                        {user.location || 'Remote'}
+                    </div>
+                    <button
+                        onClick={() => alert(`Connect request sent to ${user.name}!`)}
+                        className="flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors"
+                    >
+                        <UserPlus size={16} />
+                        Connect
+                    </button>
+                </div>
             </div>
         </div>
     );
