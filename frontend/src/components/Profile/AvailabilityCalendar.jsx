@@ -1,6 +1,6 @@
 import React from 'react';
 
-const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const times = ['Morning', 'Afternoon', 'Evening'];
 
 const AvailabilityCalendar = ({ availability }) => {

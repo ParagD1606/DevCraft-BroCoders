@@ -2,6 +2,8 @@ import React from 'react';
 import { MapPin, Link as LinkIcon, Edit2, CheckCircle } from 'lucide-react';
 
 const ProfileHeader = ({ user, onEdit }) => {
+    const heading = user.role || user.qualifications || 'Member';
+
     return (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6">
             {/* Banner */}
@@ -34,7 +36,12 @@ const ProfileHeader = ({ user, onEdit }) => {
                         {user.name}
                         {user.verified && <CheckCircle className="w-5 h-5 text-blue-500" />}
                     </h1>
-                    <p className="text-gray-500 font-medium">{user.role}</p>
+                    <p className="text-gray-500 font-medium">{heading}</p>
+
+                    <div className="mt-2 text-sm text-gray-500 flex flex-wrap gap-4">
+                        {user.age ? <span>Age: {user.age}</span> : null}
+                        {user.qualifications ? <span>{user.qualifications}</span> : null}
+                    </div>
 
                     <div className="flex flex-wrap gap-4 mt-4 text-sm text-gray-600">
                         {user.location && (
@@ -51,22 +58,26 @@ const ProfileHeader = ({ user, onEdit }) => {
                         )}
                     </div>
 
-                    <p className="mt-4 text-gray-700 leading-relaxed max-w-3xl">
-                        {user.bio}
-                    </p>
+                    {user.bio ? (
+                        <p className="mt-4 text-gray-700 leading-relaxed max-w-3xl">{user.bio}</p>
+                    ) : null}
 
                     {/* Verified Skills */}
                     <div className="mt-6">
                         <h3 className="text-sm font-bold text-gray-900 mb-3 uppercase tracking-wide">Verified Skills</h3>
                         <div className="flex flex-wrap gap-2">
-                            {user.skills.map((skill) => (
-                                <span
-                                    key={skill}
-                                    className="px-3 py-1 bg-blue-50 text-blue-700 text-sm font-medium rounded-full border border-blue-100"
-                                >
-                                    {skill}
-                                </span>
-                            ))}
+                            {user.skills.length ? (
+                                user.skills.map((skill) => (
+                                    <span
+                                        key={skill}
+                                        className="px-3 py-1 bg-blue-50 text-blue-700 text-sm font-medium rounded-full border border-blue-100"
+                                    >
+                                        {skill}
+                                    </span>
+                                ))
+                            ) : (
+                                <span className="text-sm text-gray-500">No skills added yet.</span>
+                            )}
                         </div>
                     </div>
                 </div>

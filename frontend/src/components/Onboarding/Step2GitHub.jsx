@@ -1,24 +1,186 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Github, Loader2, CheckCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { API_BASE_URL } from '../../config/api';
 
 const Step2GitHub = ({ formData, updateFormData }) => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+    const [statsLoading, setStatsLoading] = useState(false);
+    const [repoCount, setRepoCount] = useState(0);
+    const [topLanguage, setTopLanguage] = useState('N/A');
+    const popupRef = useRef(null);
+    const popupPollRef = useRef(null);
+    const connectResolvedRef = useRef(false);
 
-    const handleConnect = () => {
-        setLoading(true);
-        setError(null);
-
-        // Simulate connection
-        setTimeout(() => {
-            setLoading(false);
-            updateFormData('githubConnected', true);
-        }, 1500);
+    const clearPopupWatchers = () => {
+        if (popupPollRef.current) {
+            clearInterval(popupPollRef.current);
+            popupPollRef.current = null;
+        }
+        popupRef.current = null;
     };
 
-    const handleDisconnect = () => {
-        updateFormData('githubConnected', false);
+    useEffect(() => {
+        const handleConnectResult = (event) => {
+            if (event.origin !== window.location.origin) return;
+            if (!event.data || event.data.type !== 'github-connect') return;
+
+            connectResolvedRef.current = true;
+            setLoading(false);
+            clearPopupWatchers();
+
+            if (event.data.status === 'success') {
+                updateFormData('githubConnected', true);
+                setError(null);
+                fetchGitHubStats();
+                return;
+            }
+
+            setError('Failed to connect GitHub account. Please try again.');
+        };
+
+        window.addEventListener('message', handleConnectResult);
+        return () => {
+            window.removeEventListener('message', handleConnectResult);
+            clearPopupWatchers();
+        };
+    }, [updateFormData]);
+
+    const fetchGitHubStats = async () => {
+        setStatsLoading(true);
+        try {
+            const token = localStorage.getItem('authToken');
+            const response = await fetch(`${API_BASE_URL}/api/user/github/repos`, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to fetch GitHub stats');
+            }
+
+            const repos = Array.isArray(data) ? data : [];
+            setRepoCount(repos.length);
+
+            const languageMap = repos.reduce((acc, repo) => {
+                if (repo.language) {
+                    acc[repo.language] = (acc[repo.language] || 0) + 1;
+                }
+                return acc;
+            }, {});
+
+            const computedTopLanguage =
+                Object.entries(languageMap).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A';
+            setTopLanguage(computedTopLanguage);
+        } catch (statsError) {
+            setError(statsError.message || 'Unable to load GitHub stats');
+            setRepoCount(0);
+            setTopLanguage('N/A');
+        } finally {
+            setStatsLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (formData.githubConnected) {
+            fetchGitHubStats();
+        } else {
+            setRepoCount(0);
+            setTopLanguage('N/A');
+        }
+    }, [formData.githubConnected]);
+
+    const handleConnect = async () => {
+        setLoading(true);
+        setError(null);
+        connectResolvedRef.current = false;
+
+        try {
+            const token = localStorage.getItem('authToken');
+            if (!token) {
+                throw new Error('Please login first');
+            }
+
+            const response = await fetch(`${API_BASE_URL}/api/auth/github/connect-url`, {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+
+            const data = await response.json();
+            if (!response.ok || !data.url) {
+                throw new Error(data.error || 'Unable to start GitHub OAuth');
+            }
+
+            const popup = window.open(
+                data.url,
+                'github-connect',
+                'width=600,height=700,menubar=no,toolbar=no,status=no'
+            );
+
+            if (!popup) {
+                throw new Error('Popup blocked. Please allow popups and try again.');
+            }
+
+            popupRef.current = popup;
+            popupPollRef.current = setInterval(() => {
+                if (!popupRef.current || popupRef.current.closed) {
+                    if (!connectResolvedRef.current) {
+                        setLoading(false);
+                        setError('GitHub connection was not completed.');
+                    }
+                    clearPopupWatchers();
+                }
+            }, 500);
+        } catch (connectError) {
+            setLoading(false);
+            setError(connectError.message || 'Failed to connect GitHub');
+        }
+    };
+
+    const handleDisconnect = async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const token = localStorage.getItem('authToken');
+            if (!token) {
+                throw new Error('Please login first');
+            }
+
+            const response = await fetch(`${API_BASE_URL}/api/auth/github/connection`, {
+                method: 'DELETE',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to disconnect GitHub');
+            }
+
+            const previousUser = (() => {
+                try {
+                    return JSON.parse(localStorage.getItem('authUser') || '{}');
+                } catch (_error) {
+                    return {};
+                }
+            })();
+
+            localStorage.setItem('authToken', data.token || token);
+            localStorage.setItem('authUser', JSON.stringify({ ...previousUser, ...(data.user || {}) }));
+            updateFormData('githubConnected', false);
+            setRepoCount(0);
+            setTopLanguage('N/A');
+        } catch (disconnectError) {
+            setError(disconnectError.message || 'Failed to disconnect GitHub');
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -67,13 +229,17 @@ const Step2GitHub = ({ formData, updateFormData }) => {
                     ) : (
                         <button
                             onClick={handleDisconnect}
-                            className="w-full px-4 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors"
+                            disabled={loading}
+                            className="w-full px-4 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                         >
-                            Disconnect
+                            {loading ? 'Disconnecting...' : 'Disconnect'}
                         </button>
                     )}
                 </div>
             </div>
+            {error ? (
+                <p className="text-sm text-red-600 mt-4">{error}</p>
+            ) : null}
 
             {/* Info/Preview */}
             <AnimatePresence>
@@ -87,11 +253,15 @@ const Step2GitHub = ({ formData, updateFormData }) => {
                         <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
                             <div className="flex items-center justify-between mb-2">
                                 <span className="text-sm font-medium text-gray-500">Repositories Found</span>
-                                <span className="text-sm font-bold text-gray-900">12</span>
+                                <span className="text-sm font-bold text-gray-900">
+                                    {statsLoading ? '...' : repoCount}
+                                </span>
                             </div>
                             <div className="flex items-center justify-between">
                                 <span className="text-sm font-medium text-gray-500">Top Language</span>
-                                <span className="text-sm font-bold text-gray-900">JavaScript</span>
+                                <span className="text-sm font-bold text-gray-900">
+                                    {statsLoading ? '...' : topLanguage}
+                                </span>
                             </div>
                         </div>
                     </motion.div>

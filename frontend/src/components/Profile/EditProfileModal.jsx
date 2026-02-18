@@ -7,7 +7,16 @@ import Step4Interests from '../Onboarding/Step4Interests';
 
 const EditProfileModal = ({ user, onClose, onSave }) => {
     const [activeTab, setActiveTab] = useState('general');
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState('');
     const [formData, setFormData] = useState({
+        name: '',
+        age: '',
+        qualifications: '',
+        role: '',
+        bio: '',
+        location: '',
+        website: '',
         skills: [],
         interests: [],
         availability: {},
@@ -19,10 +28,18 @@ const EditProfileModal = ({ user, onClose, onSave }) => {
         setFormData(prev => ({ ...prev, [key]: value }));
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        onSave(formData);
-        onClose();
+        setSaving(true);
+        setError('');
+        try {
+            await onSave(formData);
+            onClose();
+        } catch (saveError) {
+            setError(saveError.message || 'Failed to save profile changes');
+        } finally {
+            setSaving(false);
+        }
     };
 
     const tabs = [
@@ -42,16 +59,36 @@ const EditProfileModal = ({ user, onClose, onSave }) => {
                             <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
                             <input
                                 type="text"
-                                value={formData.name}
+                                value={formData.name || ''}
                                 onChange={e => updateFormData('name', e.target.value)}
                                 className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Age</label>
+                                <input
+                                    type="number"
+                                    value={formData.age || ''}
+                                    onChange={e => updateFormData('age', e.target.value)}
+                                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Qualifications</label>
+                                <input
+                                    type="text"
+                                    value={formData.qualifications || ''}
+                                    onChange={e => updateFormData('qualifications', e.target.value)}
+                                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                            </div>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Role/Title</label>
                             <input
                                 type="text"
-                                value={formData.role}
+                                value={formData.role || ''}
                                 onChange={e => updateFormData('role', e.target.value)}
                                 className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
@@ -60,7 +97,7 @@ const EditProfileModal = ({ user, onClose, onSave }) => {
                             <label className="block text-sm font-medium text-gray-700 mb-1">Bio</label>
                             <textarea
                                 rows={4}
-                                value={formData.bio}
+                                value={formData.bio || ''}
                                 onChange={e => updateFormData('bio', e.target.value)}
                                 className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
@@ -78,7 +115,7 @@ const EditProfileModal = ({ user, onClose, onSave }) => {
                             <label className="block text-sm font-medium text-gray-700 mb-1">Website</label>
                             <input
                                 type="url"
-                                value={formData.website}
+                                value={formData.website || ''}
                                 onChange={e => updateFormData('website', e.target.value)}
                                 className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
@@ -129,17 +166,20 @@ const EditProfileModal = ({ user, onClose, onSave }) => {
                 </div>
 
                 <div className="p-6 border-t border-gray-100 flex justify-end gap-3 bg-gray-50">
+                    {error ? <div className="text-sm text-red-600 mr-auto">{error}</div> : null}
                     <button
                         onClick={onClose}
+                        disabled={saving}
                         className="px-6 py-2.5 text-gray-600 hover:bg-gray-200 rounded-xl transition-colors font-medium"
                     >
                         Cancel
                     </button>
                     <button
                         onClick={handleSubmit}
-                        className="px-6 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/30 font-medium"
+                        disabled={saving}
+                        className="px-6 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/30 font-medium disabled:opacity-70 disabled:cursor-not-allowed"
                     >
-                        Save Changes
+                        {saving ? 'Saving...' : 'Save Changes'}
                     </button>
                 </div>
             </div>

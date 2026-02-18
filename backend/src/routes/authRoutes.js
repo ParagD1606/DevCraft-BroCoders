@@ -5,8 +5,12 @@ const jwt = require('jsonwebtoken');
 const passport = require('passport');
 
 const User = require('../models/User');
+const { protect } = require('../middleware/authMiddleware');
 // const usersByEmail = new Map(); // Removed in-memory storage
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:5173';
+const GITHUB_CONNECT_STATE_TTL_MS = 10 * 60 * 1000;
+const githubConnectStateStore = new Map();
 
 const router = express.Router();
 
@@ -16,6 +20,33 @@ function normalizeEmail(email) {
 
 function getJwtSecret() {
   return process.env.JWT_SECRET || 'dev_secret_change_me';
+}
+
+function serializeAuthUser(user) {
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    onboardingCompleted: user.onboardingCompleted,
+    githubConnected: Boolean(user.githubId),
+    githubUsername: user.githubUsername,
+    googleConnected: Boolean(user.googleId),
+    createdAt: user.createdAt,
+  };
+}
+
+function buildFrontendOAuthRedirect(params = {}) {
+  const query = new URLSearchParams(params).toString();
+  return `${FRONTEND_ORIGIN}/oauth/callback${query ? `?${query}` : ''}`;
+}
+
+function cleanupExpiredGitHubConnectState() {
+  const now = Date.now();
+  for (const [token, state] of githubConnectStateStore.entries()) {
+    if (!state || state.expiresAt <= now) {
+      githubConnectStateStore.delete(token);
+    }
+  }
 }
 
 router.post('/signup', async (req, res) => {
@@ -56,12 +87,7 @@ router.post('/signup', async (req, res) => {
   return res.status(201).json({
     message: 'Signup successful',
     token,
-    user: {
-      id: user.id,
-      email: user.email,
-      onboardingCompleted: user.onboardingCompleted,
-      createdAt: user.createdAt,
-    },
+    user: serializeAuthUser(user),
   });
 });
 
@@ -95,17 +121,77 @@ router.post('/login', async (req, res) => {
   return res.status(200).json({
     message: 'Login successful',
     token,
-    user: {
-      id: user.id,
-      email: user.email,
-      onboardingCompleted: user.onboardingCompleted,
-      createdAt: user.createdAt,
-    },
+    user: serializeAuthUser(user),
   });
 });
 
 
+router.post('/github/connect-url', protect, async (req, res) => {
+  cleanupExpiredGitHubConnectState();
+  const stateToken = crypto.randomBytes(24).toString('hex');
+  githubConnectStateStore.set(stateToken, {
+    userId: String(req.user._id),
+    expiresAt: Date.now() + GITHUB_CONNECT_STATE_TTL_MS,
+  });
+
+  const backendOrigin = `${req.protocol}://${req.get('host')}`;
+  return res.status(200).json({
+    url: `${backendOrigin}/api/auth/github/connect?stateToken=${stateToken}`,
+  });
+});
+
+router.delete('/github/connection', protect, async (req, res) => {
+  const user = await User.findById(req.user._id);
+  if (!user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+
+  user.githubId = undefined;
+  await user.save();
+
+  const token = jwt.sign({ sub: user.id, email: user.email }, getJwtSecret(), {
+    expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+  });
+
+  return res.status(200).json({
+    message: 'GitHub disconnected successfully',
+    token,
+    user: serializeAuthUser(user),
+  });
+});
+
 // GitHub OAuth Routes
+router.get('/github/connect', (req, res, next) => {
+  cleanupExpiredGitHubConnectState();
+  const stateToken = String(req.query.stateToken || '');
+  const state = githubConnectStateStore.get(stateToken);
+  if (!state) {
+    return res.redirect(
+      buildFrontendOAuthRedirect({
+        mode: 'github_connect',
+        status: 'error',
+        error: 'invalid_or_expired_state',
+      })
+    );
+  }
+
+  if (state.expiresAt <= Date.now()) {
+    githubConnectStateStore.delete(stateToken);
+    return res.redirect(
+      buildFrontendOAuthRedirect({
+        mode: 'github_connect',
+        status: 'error',
+        error: 'state_expired',
+      })
+    );
+  }
+
+  return passport.authenticate('github', {
+    scope: ['user:email'],
+    state: `connect:${stateToken}`,
+  })(req, res, next);
+});
+
 router.get(
   '/github',
   passport.authenticate('github', { scope: ['user:email'] })
@@ -113,17 +199,81 @@ router.get(
 
 router.get(
   '/github/callback',
-  passport.authenticate('github', { session: false, failureRedirect: 'http://localhost:5173/auth?error=github_failed' }),
+  passport.authenticate('github', {
+    session: false,
+    failureRedirect: `${FRONTEND_ORIGIN}/auth?error=github_failed`,
+  }),
   async (req, res) => {
     // req.user contains the profile returned by GitHub
     const profile = req.user;
+    const state = String(req.query.state || '');
+
+    // GitHub connect flow for an already authenticated local account
+    if (state.startsWith('connect:')) {
+      const stateToken = state.replace('connect:', '');
+      const linkState = githubConnectStateStore.get(stateToken);
+      githubConnectStateStore.delete(stateToken);
+
+      if (!linkState || linkState.expiresAt <= Date.now()) {
+        return res.redirect(
+          buildFrontendOAuthRedirect({
+            mode: 'github_connect',
+            status: 'error',
+            error: 'invalid_or_expired_state',
+          })
+        );
+      }
+
+      const existingGitHubUser = await User.findOne({ githubId: profile.id });
+      if (existingGitHubUser && String(existingGitHubUser._id) !== String(linkState.userId)) {
+        return res.redirect(
+          buildFrontendOAuthRedirect({
+            mode: 'github_connect',
+            status: 'error',
+            error: 'github_account_already_linked',
+          })
+        );
+      }
+
+      const user = await User.findById(linkState.userId);
+      if (!user) {
+        return res.redirect(
+          buildFrontendOAuthRedirect({
+            mode: 'github_connect',
+            status: 'error',
+            error: 'user_not_found',
+          })
+        );
+      }
+
+      user.githubId = profile.id;
+      user.githubUsername = profile.username;
+
+      if (!user.name) {
+        user.name = profile.displayName || profile.username || user.name;
+      }
+      await user.save();
+
+      const token = jwt.sign({ sub: user.id, email: user.email }, getJwtSecret(), {
+        expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+      });
+
+      return res.redirect(
+        buildFrontendOAuthRedirect({
+          mode: 'github_connect',
+          status: 'success',
+          token,
+          user: JSON.stringify(serializeAuthUser(user)),
+        })
+      );
+    }
 
     // Get email from profile
     // GitHub profile emails might be in emails array if private
     let email = profile.emails && profile.emails[0] ? profile.emails[0].value : null;
 
     if (!email) {
-      return res.redirect('http://localhost:5173/auth?error=no_email_from_github');
+      return res.redirect(`${FRONTEND_ORIGIN}/auth?error=no_email_from_github`);
     }
 
     const normalizedEmail = normalizeEmail(email);
@@ -134,7 +284,12 @@ router.get(
       user = await User.create({
         email: normalizedEmail,
         githubId: profile.id,
+        githubUsername: profile.username,
       });
+    } else if (!user.githubId) {
+      user.githubId = profile.id;
+      user.githubUsername = profile.username;
+      await user.save();
     }
 
     // Generate Token
@@ -144,7 +299,12 @@ router.get(
 
     // Redirect to frontend with token
     // In production, consider a more secure way (e.g., cookie or short-lived code exchanging for token)
-    res.redirect(`http://localhost:5173/oauth/callback?token=${token}&user=${encodeURIComponent(JSON.stringify({ id: user.id, email: user.email, onboardingCompleted: user.onboardingCompleted, createdAt: user.createdAt }))}`);
+    res.redirect(
+      buildFrontendOAuthRedirect({
+        token,
+        user: JSON.stringify(serializeAuthUser(user)),
+      })
+    );
   }
 );
 
@@ -156,13 +316,16 @@ router.get(
 
 router.get(
   '/google/callback',
-  passport.authenticate('google', { session: false, failureRedirect: 'http://localhost:5173/auth?error=google_failed' }),
+  passport.authenticate('google', {
+    session: false,
+    failureRedirect: `${FRONTEND_ORIGIN}/auth?error=google_failed`,
+  }),
   async (req, res) => {
     const profile = req.user;
     const email = profile.emails && profile.emails[0] ? profile.emails[0].value : null;
 
     if (!email) {
-      return res.redirect('http://localhost:5173/auth?error=no_email_from_google');
+      return res.redirect(`${FRONTEND_ORIGIN}/auth?error=no_email_from_google`);
     }
 
     const normalizedEmail = normalizeEmail(email);
@@ -183,7 +346,12 @@ router.get(
       expiresIn: process.env.JWT_EXPIRES_IN || '7d',
     });
 
-    res.redirect(`http://localhost:5173/oauth/callback?token=${token}&user=${encodeURIComponent(JSON.stringify({ id: user.id, email: user.email, onboardingCompleted: user.onboardingCompleted, createdAt: user.createdAt }))}`);
+    res.redirect(
+      buildFrontendOAuthRedirect({
+        token,
+        user: JSON.stringify(serializeAuthUser(user)),
+      })
+    );
   }
 );
 

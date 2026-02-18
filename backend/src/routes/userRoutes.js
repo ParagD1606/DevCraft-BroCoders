@@ -3,6 +3,73 @@ const router = express.Router();
 const User = require('../models/User');
 const { protect } = require('../middleware/authMiddleware');
 
+async function fetchGitHubJson(path) {
+    const response = await fetch(`https://api.github.com${path}`, {
+        headers: {
+            'User-Agent': 'DevCraft-BroCoders',
+            'Accept': 'application/vnd.github.v3+json',
+        },
+    });
+
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+        const error = new Error(payload?.message || 'GitHub API request failed');
+        error.statusCode = response.status;
+        throw error;
+    }
+
+    return payload;
+}
+
+// @desc    Get user's GitHub repositories
+// @route   GET /api/user/github/repos
+// @access  Private
+router.get('/github/repos', protect, async (req, res) => {
+    try {
+        const user = await User.findById(req.user._id);
+
+        if (!user || (!user.githubUsername && !user.githubId)) {
+            return res.status(404).json({ error: 'GitHub account not connected' });
+        }
+
+        let githubUsername = user.githubUsername;
+
+        // Backward compatibility: resolve and store username for older linked users.
+        if (!githubUsername && user.githubId) {
+            const githubUser = await fetchGitHubJson(`/user/${encodeURIComponent(user.githubId)}`);
+            githubUsername = githubUser?.login;
+            if (githubUsername) {
+                user.githubUsername = githubUsername;
+                await user.save();
+            }
+        }
+
+        if (!githubUsername) {
+            return res.status(404).json({ error: 'GitHub username not found. Please reconnect GitHub.' });
+        }
+
+        const repos = await fetchGitHubJson(
+            `/users/${encodeURIComponent(githubUsername)}/repos?sort=updated&per_page=100`
+        );
+
+        const formattedRepos = (Array.isArray(repos) ? repos : []).map((repo) => ({
+            id: repo.id,
+            name: repo.name,
+            description: repo.description,
+            html_url: repo.html_url,
+            language: repo.language,
+            stargazers_count: repo.stargazers_count,
+        }));
+
+        res.json(formattedRepos);
+
+    } catch (error) {
+        console.error('Get GitHub repos error:', error);
+        const statusCode = error.statusCode || 500;
+        res.status(statusCode).json({ error: error.message || 'Server error' });
+    }
+});
+
 // @desc    Update user profile
 // @route   PUT /api/user/profile
 // @access  Private
@@ -14,6 +81,10 @@ router.put('/profile', protect, async (req, res) => {
             user.name = req.body.name || user.name;
             user.age = req.body.age || user.age;
             user.qualifications = req.body.qualifications || user.qualifications;
+            user.role = req.body.role || user.role;
+            user.bio = req.body.bio || user.bio;
+            user.location = req.body.location || user.location;
+            user.website = req.body.website || user.website;
 
             if (req.body.skills) user.skills = req.body.skills;
             if (req.body.interests) user.interests = req.body.interests;
@@ -35,6 +106,12 @@ router.put('/profile', protect, async (req, res) => {
                     email: updatedUser.email,
                     age: updatedUser.age,
                     qualifications: updatedUser.qualifications,
+                    role: updatedUser.role,
+                    bio: updatedUser.bio,
+                    location: updatedUser.location,
+                    website: updatedUser.website,
+                    githubConnected: Boolean(updatedUser.githubId),
+                    googleConnected: Boolean(updatedUser.googleId),
                     skills: updatedUser.skills,
                     interests: updatedUser.interests,
                     availability: updatedUser.availability,
@@ -65,6 +142,13 @@ router.get('/profile', protect, async (req, res) => {
                 email: user.email,
                 age: user.age,
                 qualifications: user.qualifications,
+                role: user.role,
+                bio: user.bio,
+                location: user.location,
+                website: user.website,
+                githubConnected: Boolean(user.githubId),
+                githubUsername: user.githubUsername,
+                googleConnected: Boolean(user.googleId),
                 skills: user.skills,
                 interests: user.interests,
                 availability: user.availability,

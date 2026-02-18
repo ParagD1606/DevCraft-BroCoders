@@ -10,14 +10,21 @@ import Step4Interests from './Step4Interests';
 
 const Onboarding = () => {
     const navigate = useNavigate();
+    const storedUser = (() => {
+        try {
+            return JSON.parse(localStorage.getItem('authUser') || '{}');
+        } catch (_error) {
+            return {};
+        }
+    })();
     const [currentStep, setCurrentStep] = useState(1);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [formData, setFormData] = useState({
-        name: '',
+        name: storedUser.name || '',
         age: '',
         qualifications: '',
         skills: [],
-        githubConnected: false,
+        githubConnected: Boolean(storedUser.githubConnected),
         availability: {},
         interests: [],
     });

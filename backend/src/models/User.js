@@ -24,6 +24,10 @@ const userSchema = new mongoose.Schema({
         unique: true,
         sparse: true // Allows multiple documents to have no githubId (null/undefined)
     },
+    githubUsername: {
+        type: String,
+        trim: true
+    },
     googleId: {
         type: String,
         unique: true,
@@ -37,6 +41,22 @@ const userSchema = new mongoose.Schema({
         type: Number
     },
     qualifications: {
+        type: String,
+        trim: true
+    },
+    role: {
+        type: String,
+        trim: true
+    },
+    bio: {
+        type: String,
+        trim: true
+    },
+    location: {
+        type: String,
+        trim: true
+    },
+    website: {
         type: String,
         trim: true
     },
