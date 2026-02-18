@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, User, Code, Calendar, Heart, Github } from 'lucide-react';
 import Step1Skills from '../Onboarding/Step1Skills';
 import Step2GitHub from '../Onboarding/Step2GitHub';
 import Step3Availability from '../Onboarding/Step3Availability';
 import Step4Interests from '../Onboarding/Step4Interests';
 
-const EditProfileModal = ({ user, onClose, onSave }) => {
-    const [activeTab, setActiveTab] = useState('general');
+const EditProfileModal = ({ user, onClose, onSave, initialTab = 'general' }) => {
+    const [activeTab, setActiveTab] = useState(initialTab);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
     const [formData, setFormData] = useState({
@@ -27,6 +27,10 @@ const EditProfileModal = ({ user, onClose, onSave }) => {
     const updateFormData = (key, value) => {
         setFormData(prev => ({ ...prev, [key]: value }));
     };
+
+    useEffect(() => {
+        setActiveTab(initialTab || 'general');
+    }, [initialTab]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();

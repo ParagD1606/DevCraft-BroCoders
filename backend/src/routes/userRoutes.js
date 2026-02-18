@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
+const Project = require('../models/Project');
+const Notification = require('../models/Notification');
 const { protect } = require('../middleware/authMiddleware');
 
 async function fetchGitHubJson(path, extraHeaders = {}) {
@@ -256,6 +258,133 @@ function getStoredGitHubSummary(user) {
     };
 }
 
+function toLowerSet(values = []) {
+    return new Set(
+        (Array.isArray(values) ? values : [])
+            .map((value) => String(value || '').trim().toLowerCase())
+            .filter(Boolean)
+    );
+}
+
+function calculateProfileCompletion(user) {
+    if (!user) return 0;
+
+    const checkpoints = [
+        Boolean(String(user.name || '').trim()),
+        Number.isFinite(Number(user.age)),
+        Boolean(String(user.qualifications || '').trim()),
+        Boolean(String(user.role || '').trim()),
+        Boolean(String(user.bio || '').trim()),
+        Boolean(String(user.location || '').trim()),
+        Boolean(String(user.website || '').trim()),
+        Array.isArray(user.skills) && user.skills.length > 0,
+        Array.isArray(user.interests) && user.interests.length > 0,
+        Boolean(user.githubId || user.githubUsername),
+    ];
+
+    const completed = checkpoints.filter(Boolean).length;
+    return Math.round((completed / checkpoints.length) * 100);
+}
+
+function getProjectType(status) {
+    if (status === 'Completed') return 'completed';
+    if (status === 'Pending') return 'pending';
+    return 'active';
+}
+
+function mapDashboardProject(project, currentUserId) {
+    const ownerId = String(project?.owner?._id || project?.owner || '');
+    const currentId = String(currentUserId || '');
+    const members = Array.isArray(project?.members) ? project.members : [];
+    const membership = members.find(
+        (member) => String(member?.user?._id || member?.user || '') === currentId
+    );
+    const role = ownerId === currentId ? 'Owner' : (membership?.role || 'Member');
+    const teamSize = Math.max(1, Number(project?.teamSize) || 1 + members.length);
+
+    return {
+        id: String(project?._id || ''),
+        title: project?.title || 'Untitled Project',
+        role,
+        status: project?.status || 'In Progress',
+        progress: Math.max(0, Math.min(100, Number(project?.progress) || 0)),
+        teamSize,
+        type: getProjectType(project?.status),
+        updatedAt: project?.updatedAt || project?.createdAt || null,
+    };
+}
+
+function buildSuggestedMatches(currentUser, users) {
+    const mySkills = toLowerSet(currentUser?.skills || []);
+    const myRole = String(currentUser?.role || '').trim().toLowerCase();
+
+    return (Array.isArray(users) ? users : [])
+        .map((candidate) => {
+            const candidateSkills = Array.isArray(candidate?.skills) ? candidate.skills : [];
+            const candidateSkillSet = toLowerSet(candidateSkills);
+            const overlapCount = [...mySkills].filter((skill) => candidateSkillSet.has(skill)).length;
+            const unionCount = new Set([...mySkills, ...candidateSkillSet]).size;
+            const skillMatch = unionCount > 0 ? Math.round((overlapCount / unionCount) * 100) : 0;
+            const roleMatch =
+                myRole && String(candidate?.role || '').trim().toLowerCase() === myRole ? 10 : 0;
+            const profileDepthBonus = Math.min(10, candidateSkillSet.size * 2);
+            const matchScore = Math.min(99, Math.max(0, skillMatch + roleMatch + profileDepthBonus));
+
+            const highlightedSkills =
+                overlapCount > 0
+                    ? candidateSkills.filter((skill) =>
+                          mySkills.has(String(skill || '').trim().toLowerCase())
+                      )
+                    : candidateSkills;
+
+            return {
+                id: String(candidate?._id || ''),
+                name: candidate?.name || candidate?.email || 'Teammate',
+                role: candidate?.role || 'Member',
+                matchScore,
+                matchLabel: `${matchScore}%`,
+                skills: highlightedSkills.slice(0, 4),
+            };
+        })
+        .sort((a, b) => b.matchScore - a.matchScore)
+        .slice(0, 6);
+}
+
+function buildSkillGapSummary(currentUser, projects) {
+    const mySkills = toLowerSet(currentUser?.skills || []);
+    const activeProjects = (Array.isArray(projects) ? projects : []).filter(
+        (project) => getProjectType(project?.status) === 'active'
+    );
+
+    const missingByProject = activeProjects.map((project) => {
+        const requiredSkills = new Set(
+            (Array.isArray(project?.roles) ? project.roles : [])
+                .flatMap((role) => (Array.isArray(role?.skills) ? role.skills : []))
+                .map((skill) => String(skill || '').trim())
+                .filter(Boolean)
+        );
+
+        const missingSkills = [...requiredSkills].filter(
+            (skill) => !mySkills.has(String(skill || '').trim().toLowerCase())
+        );
+
+        return {
+            projectId: String(project?._id || ''),
+            missingSkills,
+        };
+    });
+
+    const impactedProjects = missingByProject.filter((item) => item.missingSkills.length > 0).length;
+    const uniqueMissingSkills = Array.from(
+        new Set(missingByProject.flatMap((item) => item.missingSkills))
+    );
+
+    return {
+        impactedProjects,
+        missingSkills: uniqueMissingSkills.slice(0, 10),
+    };
+}
+
 // @desc    Get user's GitHub repositories
 // @route   GET /api/user/github/repos
 // @access  Private
@@ -348,6 +477,67 @@ router.get('/:userId/github/summary', protect, async (req, res) => {
         console.error('Get teammate GitHub summary error:', error);
         const statusCode = error.statusCode || 500;
         res.status(statusCode).json({ error: error.message || 'Server error' });
+    }
+});
+
+// @desc    Get dashboard summary for current user
+// @route   GET /api/user/dashboard
+// @access  Private
+router.get('/dashboard', protect, async (req, res) => {
+    try {
+        const currentUser = await User.findById(req.user._id).select(
+            'name email age qualifications role bio location website skills interests githubId githubUsername'
+        );
+
+        if (!currentUser) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        const [projects, pendingInvitesCount, candidates] = await Promise.all([
+            Project.find({
+                $or: [{ owner: req.user._id }, { 'members.user': req.user._id }],
+            })
+                .sort({ updatedAt: -1 })
+                .limit(50),
+            Notification.countDocuments({
+                recipient: req.user._id,
+                type: 'project_invite',
+                status: 'pending',
+            }),
+            User.find({ _id: { $ne: req.user._id } })
+                .select('name email role skills')
+                .limit(80),
+        ]);
+
+        const mappedProjects = projects.map((project) => mapDashboardProject(project, req.user._id));
+        const activeProjects = mappedProjects.filter((project) => project.type === 'active');
+        const pendingProjects = mappedProjects.filter((project) => project.type === 'pending');
+        const completedProjects = mappedProjects.filter((project) => project.type === 'completed');
+
+        const suggestedMatches = buildSuggestedMatches(currentUser, candidates);
+        const skillGaps = buildSkillGapSummary(currentUser, projects);
+
+        return res.json({
+            user: {
+                id: String(currentUser._id),
+                name: currentUser.name || currentUser.email || 'Developer',
+                role: currentUser.role || 'Member',
+            },
+            stats: {
+                activeProjects: activeProjects.length,
+                pendingProjects: pendingProjects.length,
+                completedProjects: completedProjects.length,
+                pendingInvites: pendingInvitesCount,
+                suggestedMatches: suggestedMatches.length,
+                profileCompletion: calculateProfileCompletion(currentUser),
+            },
+            activeProjects: activeProjects.slice(0, 8),
+            suggestedMatches,
+            skillGaps,
+        });
+    } catch (error) {
+        console.error('Get dashboard summary error:', error);
+        return res.status(500).json({ error: 'Server error' });
     }
 });
 

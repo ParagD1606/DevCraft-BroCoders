@@ -10,6 +10,7 @@ import { sanitizeHtml } from '../../utils/sanitizeHtml';
 
 const Profile = () => {
     const [isEditing, setIsEditing] = useState(false);
+    const [editInitialTab, setEditInitialTab] = useState('general');
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -197,6 +198,11 @@ const Profile = () => {
         persistAuthUser(normalized);
     };
 
+    const openEditModal = (tab = 'general') => {
+        setEditInitialTab(tab);
+        setIsEditing(true);
+    };
+
     if (loading) {
         return (
             <div className="max-w-6xl xl:max-w-7xl 2xl:max-w-screen-2xl mx-auto min-h-[50vh] flex items-center justify-center">
@@ -222,7 +228,8 @@ const Profile = () => {
         <div className="max-w-6xl xl:max-w-7xl 2xl:max-w-screen-2xl mx-auto space-y-6">
             <ProfileHeader
                 user={user}
-                onEdit={() => setIsEditing(true)}
+                onEdit={() => openEditModal('general')}
+                onEditSkills={() => openEditModal('skills')}
                 topLanguage={topLanguage}
                 reposLoading={reposLoading}
                 githubSummary={githubSummary}
@@ -407,7 +414,7 @@ const Profile = () => {
                                 <h4 className="font-bold text-gray-900 mb-1">Connect GitHub</h4>
                                 <p className="text-gray-500 text-sm mb-4">Link your account to showcase your repositories</p>
                                 <button
-                                    onClick={() => setIsEditing(true)}
+                                    onClick={() => openEditModal('general')}
                                     className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium"
                                 >
                                     Go to Settings
@@ -444,6 +451,7 @@ const Profile = () => {
                     user={user}
                     onClose={() => setIsEditing(false)}
                     onSave={handleSave}
+                    initialTab={editInitialTab}
                 />
             )}
         </div>

@@ -1,16 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Folder, Loader2, Plus } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import ProjectCard from './ProjectCard';
 import { API_BASE_URL } from '../../config/api';
 
 const MyProjects = () => {
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const [activeTab, setActiveTab] = useState('active');
     const [projects, setProjects] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const searchQuery = (searchParams.get('search') || '').trim().toLowerCase();
 
     const tabs = [
         { id: 'active', label: 'Active Projects' },
@@ -46,7 +48,24 @@ const MyProjects = () => {
         fetchProjects();
     }, []);
 
-    const filteredProjects = projects.filter(p => p.type === activeTab);
+    const filteredProjects = projects.filter((project) => {
+        const matchesTab = project.type === activeTab;
+        if (!matchesTab) return false;
+        if (!searchQuery) return true;
+
+        const searchableContent = [
+            project.title,
+            project.description,
+            project.category,
+            project.status,
+            ...(Array.isArray(project.skillsRequired) ? project.skillsRequired : []),
+            ...(Array.isArray(project.techStack) ? project.techStack : []),
+        ]
+            .map((item) => String(item || '').toLowerCase())
+            .join(' ');
+
+        return searchableContent.includes(searchQuery);
+    });
 
     return (
         <div className="max-w-7xl 2xl:max-w-screen-2xl mx-auto">
@@ -121,7 +140,9 @@ const MyProjects = () => {
                         className="col-span-full py-12 text-center text-gray-500 bg-gray-50 rounded-2xl border border-dashed border-gray-200"
                     >
                         <Folder size={48} className="mx-auto mb-4 text-gray-300" />
-                        <p>No projects found in this category.</p>
+                        <p>
+                            {searchQuery ? 'No projects match your search query.' : 'No projects found in this category.'}
+                        </p>
                     </motion.div>
                 )}
                 </div>

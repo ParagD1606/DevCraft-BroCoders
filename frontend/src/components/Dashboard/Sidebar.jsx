@@ -15,7 +15,8 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
     ];
 
     const handleLogout = () => {
-        // Add logout logic here
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('authUser');
         navigate('/');
     };
 

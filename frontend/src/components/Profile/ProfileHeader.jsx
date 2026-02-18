@@ -1,7 +1,7 @@
 import React from 'react';
 import { MapPin, Link as LinkIcon, Edit2, CheckCircle } from 'lucide-react';
 
-const ProfileHeader = ({ user, onEdit, topLanguage, reposLoading, githubSummary }) => {
+const ProfileHeader = ({ user, onEdit, onEditSkills, topLanguage, reposLoading, githubSummary }) => {
     const heading = user.role || user.qualifications || 'Member';
     const githubHandle = githubSummary?.profile?.login || user.githubUsername;
     const githubFollowers = githubSummary?.stats?.followers;
@@ -84,7 +84,15 @@ const ProfileHeader = ({ user, onEdit, topLanguage, reposLoading, githubSummary 
 
                     {/* Verified Skills */}
                     <div className="mt-6">
-                        <h3 className="text-sm font-bold text-gray-900 mb-3 uppercase tracking-wide">Verified Skills</h3>
+                        <div className="flex items-center justify-between gap-3 mb-3">
+                            <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Verified Skills</h3>
+                            <button
+                                onClick={onEditSkills || onEdit}
+                                className="text-xs font-medium text-blue-600 hover:text-blue-700 transition-colors"
+                            >
+                                Add Skill
+                            </button>
+                        </div>
                         <div className="flex flex-wrap gap-2">
                             {user.skills.length ? (
                                 user.skills.map((skill) => (
@@ -96,7 +104,7 @@ const ProfileHeader = ({ user, onEdit, topLanguage, reposLoading, githubSummary 
                                     </span>
                                 ))
                             ) : (
-                                <span className="text-sm text-gray-500">No skills added yet.</span>
+                                <span className="text-sm text-gray-500">No skills added yet. Click Add Skill.</span>
                             )}
                         </div>
                     </div>

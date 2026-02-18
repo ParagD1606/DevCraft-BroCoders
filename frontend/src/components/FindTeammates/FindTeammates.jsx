@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Loader2 } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import FilterSidebar from './FilterSidebar';
 import TeammateCard from './TeammateCard';
 import TeammateDetailsModal from './TeammateDetailsModal';
@@ -7,7 +8,8 @@ import ComponentErrorBoundary from '../common/ComponentErrorBoundary';
 import { API_BASE_URL } from '../../config/api';
 
 const FindTeammates = () => {
-    const [searchQuery, setSearchQuery] = useState('');
+    const [searchParams, setSearchParams] = useSearchParams();
+    const [searchQuery, setSearchQuery] = useState(() => searchParams.get('search') || '');
     const [filters, setFilters] = useState({
         skills: [],
         availability: [],
@@ -17,6 +19,24 @@ const FindTeammates = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [selectedTeammate, setSelectedTeammate] = useState(null);
+
+    useEffect(() => {
+        const queryFromUrl = searchParams.get('search') || '';
+        if (queryFromUrl !== searchQuery) {
+            setSearchQuery(queryFromUrl);
+        }
+    }, [searchParams, searchQuery]);
+
+    const handleSearchChange = (value) => {
+        setSearchQuery(value);
+        const nextParams = new URLSearchParams(searchParams);
+        if (value.trim()) {
+            nextParams.set('search', value.trim());
+        } else {
+            nextParams.delete('search');
+        }
+        setSearchParams(nextParams, { replace: true });
+    };
 
     const fetchTeammates = async () => {
         setLoading(true);
@@ -82,7 +102,7 @@ const FindTeammates = () => {
                             type="text"
                             placeholder="Search by name, role, or skill..."
                             value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onChange={(e) => handleSearchChange(e.target.value)}
                             className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm"
                         />
                     </div>
