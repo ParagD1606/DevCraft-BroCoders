@@ -11,6 +11,7 @@ import Onboarding from './components/Onboarding/Onboarding';
 import DashboardLayout from './components/Dashboard/DashboardLayout';
 import DashboardHome from './components/Dashboard/DashboardHome';
 import Profile from './components/Profile/Profile';
+import TeammateProfile from './components/Profile/TeammateProfile';
 import CreateProject from './components/CreateProject/CreateProject';
 import ProjectDetails from './components/ProjectDetails/ProjectDetails';
 import FindTeammates from './components/FindTeammates/FindTeammates';
@@ -18,6 +19,7 @@ import MyProjects from './components/MyProjects/MyProjects';
 import ChatLayout from './components/Chat/ChatLayout';
 import MatchInsights from './components/MatchInsights/MatchInsights';
 import NotificationsPage from './components/Notifications/NotificationsPage';
+import ProjectBazaar from './components/ProjectBazaar/ProjectBazaar';
 import './App.css';
 
 function ScrollToAnchor() {
@@ -75,6 +77,14 @@ function App() {
           }
         />
         <Route
+          path="/user/:userId"
+          element={
+            <DashboardLayout>
+              <TeammateProfile />
+            </DashboardLayout>
+          }
+        />
+        <Route
           path="/create-project"
           element={
             <DashboardLayout>
@@ -127,6 +137,14 @@ function App() {
           element={
             <DashboardLayout>
               <NotificationsPage />
+            </DashboardLayout>
+          }
+        />
+        <Route
+          path="/project-bazaar"
+          element={
+            <DashboardLayout>
+              <ProjectBazaar />
             </DashboardLayout>
           }
         />

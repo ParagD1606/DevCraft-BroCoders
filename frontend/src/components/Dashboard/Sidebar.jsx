@@ -1,6 +1,16 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Folder, Users, User, BarChart2, MessageSquare, LogOut, X } from 'lucide-react';
+import {
+    LayoutDashboard,
+    Folder,
+    Users,
+    User,
+    BarChart2,
+    MessageSquare,
+    BriefcaseBusiness,
+    LogOut,
+    X
+} from 'lucide-react';
 
 const Sidebar = ({ isOpen, setIsOpen }) => {
     const navigate = useNavigate();
@@ -8,6 +18,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
     const links = [
         { icon: <LayoutDashboard size={20} />, label: 'Dashboard', path: '/dashboard' },
         { icon: <Folder size={20} />, label: 'My Projects', path: '/projects' },
+        { icon: <BriefcaseBusiness size={20} />, label: 'Project Bazaar', path: '/project-bazaar' },
         { icon: <Users size={20} />, label: 'Find Teammates', path: '/find-teammates' },
         { icon: <User size={20} />, label: 'Profile', path: '/profile' },
         { icon: <BarChart2 size={20} />, label: 'Match Insights', path: '/insights' },

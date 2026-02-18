@@ -21,6 +21,18 @@ const ProjectDetails = () => {
     const [progressSaving, setProgressSaving] = useState(false);
     const [progressError, setProgressError] = useState('');
     const [progressSuccess, setProgressSuccess] = useState('');
+    const [newRole, setNewRole] = useState({
+        title: '',
+        skills: '',
+        spots: 1,
+        durationHours: '',
+    });
+    const [postingRole, setPostingRole] = useState(false);
+    const [postRoleError, setPostRoleError] = useState('');
+    const [postRoleSuccess, setPostRoleSuccess] = useState('');
+    const [applyingRoleTitle, setApplyingRoleTitle] = useState('');
+    const [applyError, setApplyError] = useState('');
+    const [applySuccess, setApplySuccess] = useState('');
 
     useEffect(() => {
         const fetchProject = async () => {
@@ -128,6 +140,88 @@ const ProjectDetails = () => {
         }
     };
 
+    const handlePostRole = async (event) => {
+        event.preventDefault();
+        setPostRoleError('');
+        setPostRoleSuccess('');
+
+        if (!newRole.title.trim()) {
+            setPostRoleError('Role title is required.');
+            return;
+        }
+
+        setPostingRole(true);
+        try {
+            const token = localStorage.getItem('authToken');
+            const response = await fetch(`${API_BASE_URL}/api/project/${id}/roles`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    title: newRole.title.trim(),
+                    skills: String(newRole.skills || '')
+                        .split(',')
+                        .map((skill) => skill.trim())
+                        .filter(Boolean),
+                    spots: Number(newRole.spots) || 1,
+                    durationHours: Number(newRole.durationHours) > 0 ? Number(newRole.durationHours) : null,
+                }),
+            });
+
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to post open role');
+            }
+
+            setProject(data.project || project);
+            setPostRoleSuccess('Open role posted to Project Bazaar.');
+            setNewRole({
+                title: '',
+                skills: '',
+                spots: 1,
+                durationHours: '',
+            });
+        } catch (actionError) {
+            setPostRoleError(actionError.message || 'Failed to post open role');
+        } finally {
+            setPostingRole(false);
+        }
+    };
+
+    const handleApplyToRole = async (role) => {
+        const roleTitle = String(role?.title || '').trim();
+        if (!roleTitle) {
+            return;
+        }
+
+        setApplyError('');
+        setApplySuccess('');
+        setApplyingRoleTitle(roleTitle);
+        try {
+            const token = localStorage.getItem('authToken');
+            const response = await fetch(`${API_BASE_URL}/api/project/${id}/apply`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({ roleTitle }),
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to submit application');
+            }
+
+            setApplySuccess('Application submitted. Project owner has been notified.');
+        } catch (actionError) {
+            setApplyError(actionError.message || 'Failed to submit application');
+        } finally {
+            setApplyingRoleTitle('');
+        }
+    };
+
     if (loading) {
         return (
             <div className="max-w-6xl xl:max-w-7xl 2xl:max-w-screen-2xl mx-auto min-h-[40vh] flex items-center justify-center">
@@ -165,7 +259,23 @@ const ProjectDetails = () => {
                         </div>
                     </div>
 
-                    <OpenRolesList roles={project.roles} />
+                    {applyError ? (
+                        <div className="mb-4 text-xs text-red-600 bg-red-50 border border-red-100 rounded-md p-3">
+                            {applyError}
+                        </div>
+                    ) : null}
+                    {applySuccess ? (
+                        <div className="mb-4 text-xs text-green-700 bg-green-50 border border-green-100 rounded-md p-3">
+                            {applySuccess}
+                        </div>
+                    ) : null}
+
+                    <OpenRolesList
+                        roles={project.roles}
+                        canApply={!project.isOwner && !project.isMember}
+                        onApplyRole={handleApplyToRole}
+                        applyingRoleTitle={applyingRoleTitle}
+                    />
                 </div>
 
                 {/* Right Column - Team & Info */}
@@ -226,6 +336,65 @@ const ProjectDetails = () => {
                             </div>
                         )}
                     </div>
+
+                    {project.isOwner ? (
+                        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+                            <h3 className="font-bold text-gray-900 mb-4">Post Open Role</h3>
+                            <form className="space-y-3" onSubmit={handlePostRole}>
+                                <input
+                                    type="text"
+                                    value={newRole.title}
+                                    onChange={(event) => setNewRole((prev) => ({ ...prev, title: event.target.value }))}
+                                    placeholder="Role title (e.g., UI/UX Designer)"
+                                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                                <input
+                                    type="text"
+                                    value={newRole.skills}
+                                    onChange={(event) => setNewRole((prev) => ({ ...prev, skills: event.target.value }))}
+                                    placeholder="Skills (comma separated)"
+                                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                                <div className="grid grid-cols-2 gap-3">
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        value={newRole.spots}
+                                        onChange={(event) => setNewRole((prev) => ({ ...prev, spots: Number(event.target.value) || 1 }))}
+                                        placeholder="Spots"
+                                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    />
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        value={newRole.durationHours}
+                                        onChange={(event) => setNewRole((prev) => ({ ...prev, durationHours: event.target.value }))}
+                                        placeholder="Urgency hours (optional)"
+                                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    />
+                                </div>
+
+                                {postRoleError ? (
+                                    <div className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-md p-2">
+                                        {postRoleError}
+                                    </div>
+                                ) : null}
+                                {postRoleSuccess ? (
+                                    <div className="text-xs text-green-700 bg-green-50 border border-green-100 rounded-md p-2">
+                                        {postRoleSuccess}
+                                    </div>
+                                ) : null}
+
+                                <button
+                                    type="submit"
+                                    disabled={postingRole}
+                                    className="w-full bg-gray-900 text-white text-sm font-semibold py-2 rounded-lg hover:bg-black transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                                >
+                                    {postingRole ? 'Posting...' : 'Post Role'}
+                                </button>
+                            </form>
+                        </div>
+                    ) : null}
 
                     {project.isOwner ? (
                         <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">

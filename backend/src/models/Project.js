@@ -14,6 +14,11 @@ const projectRoleSchema = new mongoose.Schema(
     spots: {
       type: Number,
       default: 1,
+      min: 0,
+    },
+    durationHours: {
+      type: Number,
+      default: null,
       min: 1,
     },
   },

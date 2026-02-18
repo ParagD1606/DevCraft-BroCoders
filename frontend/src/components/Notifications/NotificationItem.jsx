@@ -16,6 +16,7 @@ const NotificationItem = ({
         switch (type) {
             case 'alert': return <Info size={16} className="text-blue-500" />;
             case 'invite': return <UserPlus size={16} className="text-green-500" />;
+            case 'application': return <UserPlus size={16} className="text-orange-500" />;
             case 'message': return <MessageSquare size={16} className="text-purple-500" />;
             case 'match': return <Star size={16} className="text-yellow-500" />;
             default: return <Bell size={16} className="text-gray-500" />;
@@ -26,6 +27,7 @@ const NotificationItem = ({
         switch (type) {
             case 'alert': return 'bg-blue-50';
             case 'invite': return 'bg-green-50';
+            case 'application': return 'bg-orange-50';
             case 'message': return 'bg-purple-50';
             case 'match': return 'bg-yellow-50';
             default: return 'bg-gray-50';
@@ -53,7 +55,7 @@ const NotificationItem = ({
                 </div>
                 <p className="text-sm text-gray-500 line-clamp-2">{message}</p>
 
-                {type === 'invite' && status && status !== 'pending' ? (
+                {(type === 'invite' || type === 'application') && status && status !== 'pending' ? (
                     <p
                         className={`mt-2 text-xs font-semibold uppercase tracking-wide ${status === 'accepted' ? 'text-green-600' : 'text-red-600'
                             }`}

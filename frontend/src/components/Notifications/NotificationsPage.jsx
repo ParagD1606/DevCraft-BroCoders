@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Filter, CheckCircle, Loader2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import NotificationItem from './NotificationItem';
 import { API_BASE_URL } from '../../config/api';
 
 const NotificationsPage = () => {
+    const navigate = useNavigate();
     const [filter, setFilter] = useState('all');
     const [notifications, setNotifications] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -62,7 +64,7 @@ const NotificationsPage = () => {
             });
             const data = await response.json();
             if (!response.ok) {
-                throw new Error(data.error || `Failed to ${action} invite`);
+                throw new Error(data.error || `Failed to ${action} notification`);
             }
             setNotifications((current) =>
                 current.map((notification) =>
@@ -131,6 +133,7 @@ const NotificationsPage = () => {
         { id: 'all', label: 'All' },
         { id: 'unread', label: 'Unread' },
         { id: 'invite', label: 'Invites' },
+        { id: 'application', label: 'Applications' },
         { id: 'message', label: 'Messages' },
         { id: 'alert', label: 'System' }
     ];
@@ -188,30 +191,45 @@ const NotificationsPage = () => {
                             Loading notifications...
                         </div>
                     ) : filteredNotifications.length > 0 ? (
-                        filteredNotifications.map(notification => (
-                            <NotificationItem
-                                key={notification.id}
-                                {...notification}
-                                onClick={() => markNotificationRead(notification.id)}
-                                actions={
-                                    notification.type === 'invite' && notification.status === 'pending'
-                                        ? [
-                                            {
-                                                label: pendingActionId === notification.id ? 'Accepting...' : 'Accept',
-                                                onClick: () => runNotificationAction(notification.id, 'accept'),
-                                                disabled: pendingActionId === notification.id,
-                                            },
-                                            {
-                                                label: pendingActionId === notification.id ? 'Declining...' : 'Decline',
-                                                onClick: () => runNotificationAction(notification.id, 'reject'),
-                                                variant: 'secondary',
-                                                disabled: pendingActionId === notification.id,
-                                            },
-                                        ]
-                                        : []
-                                }
-                            />
-                        ))
+                        filteredNotifications.map(notification => {
+                            const canActOnNotification =
+                                ['project_invite', 'project_application'].includes(notification.rawType) &&
+                                notification.status === 'pending';
+
+                            const actions = [];
+                            if (notification.rawType === 'project_application' && notification.sender?.id) {
+                                actions.push({
+                                    label: 'View Profile',
+                                    variant: 'secondary',
+                                    onClick: () => navigate(`/user/${notification.sender.id}`),
+                                });
+                            }
+
+                            if (canActOnNotification) {
+                                actions.push(
+                                    {
+                                        label: pendingActionId === notification.id ? 'Accepting...' : 'Accept',
+                                        onClick: () => runNotificationAction(notification.id, 'accept'),
+                                        disabled: pendingActionId === notification.id,
+                                    },
+                                    {
+                                        label: pendingActionId === notification.id ? 'Rejecting...' : 'Reject',
+                                        onClick: () => runNotificationAction(notification.id, 'reject'),
+                                        variant: 'secondary',
+                                        disabled: pendingActionId === notification.id,
+                                    }
+                                );
+                            }
+
+                            return (
+                                <NotificationItem
+                                    key={notification.id}
+                                    {...notification}
+                                    onClick={() => markNotificationRead(notification.id)}
+                                    actions={actions}
+                                />
+                            );
+                        })
                     ) : (
                         <div className="p-12 text-center text-gray-500">
                             <Filter size={48} className="mx-auto mb-4 text-gray-300" />

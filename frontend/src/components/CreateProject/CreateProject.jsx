@@ -54,6 +54,7 @@ const CreateProject = () => {
                             .map((skill) => skill.trim())
                             .filter(Boolean),
                         spots: role.spots,
+                        durationHours: Number(role.durationHours) > 0 ? Number(role.durationHours) : null,
                     })),
                 }),
             });

@@ -15,7 +15,7 @@ const notificationSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['project_invite'],
+      enum: ['project_invite', 'project_application'],
       default: 'project_invite',
       index: true,
     },
@@ -29,6 +29,11 @@ const notificationSchema = new mongoose.Schema(
       type: String,
       trim: true,
       default: 'Contributor',
+    },
+    roleTitle: {
+      type: String,
+      trim: true,
+      default: '',
     },
     title: {
       type: String,
@@ -70,6 +75,14 @@ notificationSchema.index(
   {
     unique: true,
     partialFilterExpression: { type: 'project_invite', status: 'pending' },
+  }
+);
+
+notificationSchema.index(
+  { recipient: 1, sender: 1, project: 1, type: 1, status: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { type: 'project_application', status: 'pending' },
   }
 );
 

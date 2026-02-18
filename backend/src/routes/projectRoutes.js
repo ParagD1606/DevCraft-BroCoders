@@ -23,6 +23,36 @@ function formatDueDate(dateValue) {
   });
 }
 
+function normalizeRoleInput(role) {
+  if (!role || !role.title) return null;
+
+  const title = String(role.title).trim();
+  if (!title) return null;
+
+  const skills = Array.isArray(role.skills)
+    ? role.skills.map((skill) => String(skill).trim()).filter(Boolean)
+    : String(role.skills || '')
+        .split(',')
+        .map((skill) => String(skill).trim())
+        .filter(Boolean);
+
+  const numericSpots = Number(role.spots);
+  const spots = Number.isFinite(numericSpots) ? Math.max(1, Math.round(numericSpots)) : 1;
+
+  const numericDurationHours = Number(role.durationHours);
+  const durationHours =
+    Number.isFinite(numericDurationHours) && numericDurationHours > 0
+      ? Math.round(numericDurationHours)
+      : null;
+
+  return {
+    title,
+    skills,
+    spots,
+    durationHours,
+  };
+}
+
 function toProjectListItem(project, currentUserId = null) {
   const ownerId = String(project?.owner?._id || project?.owner || '');
   const normalizedCurrentUserId = currentUserId ? String(currentUserId) : '';
@@ -97,6 +127,9 @@ function toProjectDetail(project, currentUser) {
   );
 
   const normalizedMembers = Array.isArray(project.members) ? project.members : [];
+  const isMember = normalizedMembers.some(
+    (member) => String(member?.user?._id || member?.user || '') === currentUserId
+  );
   const teamMembers = normalizedMembers
     .map((member) => {
       const user = member?.user || {};
@@ -124,6 +157,7 @@ function toProjectDetail(project, currentUser) {
     category: project.category || 'General',
     startDate: formatReadableDate(project.startDate || project.createdAt),
     isOwner,
+    isMember,
     ownerId,
     missingSkills,
     roles: (project.roles || []).map((role, index) => ({
@@ -131,7 +165,8 @@ function toProjectDetail(project, currentUser) {
       title: role.title,
       skills: Array.isArray(role.skills) ? role.skills : [],
       commitment: commitmentLabel,
-      spots: role.spots || 1,
+      spots: Number.isFinite(Number(role.spots)) ? Number(role.spots) : 1,
+      durationHours: Number(role.durationHours) || null,
     })),
     team: [
       {
@@ -146,6 +181,70 @@ function toProjectDetail(project, currentUser) {
       ...teamMembers,
     ],
   };
+}
+
+function toBazaarFeedItems(projects, query = {}) {
+  const search = String(query.search || '')
+    .trim()
+    .toLowerCase();
+  const skill = String(query.skill || '')
+    .trim()
+    .toLowerCase();
+
+  const items = projects.flatMap((project) => {
+    const owner = project.owner || {};
+    const ownerId = String(owner._id || project.owner || '');
+
+    return (project.roles || [])
+      .filter((role) => role && role.title && (Number(role.spots) || 0) > 0)
+      .map((role, index) => {
+        const roleSkills = Array.isArray(role.skills) ? role.skills : [];
+        return {
+          id: `${project._id}-${index}`,
+          projectId: String(project._id),
+          projectTitle: project.title,
+          projectDescription: project.description,
+          projectCategory: project.category || 'General',
+          projectStatus: project.status,
+          projectProgress: Number(project.progress) || 0,
+          projectCommitment: project.commitment || 'Flexible',
+          owner: {
+            id: ownerId,
+            name: owner.name || owner.email || 'Project Owner',
+          },
+          roleTitle: role.title,
+          skills: roleSkills,
+          spots: Number(role.spots) || 1,
+          durationHours: Number(role.durationHours) || null,
+          postedAt: project.updatedAt || project.createdAt,
+        };
+      });
+  });
+
+  return items
+    .filter((item) => {
+      if (skill) {
+        const hasSkill = item.skills.some(
+          (itemSkill) => String(itemSkill).trim().toLowerCase() === skill
+        );
+        if (!hasSkill) return false;
+      }
+
+      if (!search) return true;
+
+      const searchCorpus = [
+        item.projectTitle,
+        item.projectDescription,
+        item.projectCategory,
+        item.roleTitle,
+        item.owner?.name,
+        ...(item.skills || []),
+      ]
+        .join(' ')
+        .toLowerCase();
+      return searchCorpus.includes(search);
+    })
+    .sort((a, b) => new Date(b.postedAt).getTime() - new Date(a.postedAt).getTime());
 }
 
 // @desc    Create a new project
@@ -168,15 +267,7 @@ router.post('/', protect, async (req, res) => {
     }
 
     const normalizedRoles = Array.isArray(roles)
-      ? roles
-          .filter((role) => role && role.title)
-          .map((role) => ({
-            title: String(role.title).trim(),
-            skills: Array.isArray(role.skills)
-              ? role.skills.map((skill) => String(skill).trim()).filter(Boolean)
-              : [],
-            spots: Math.max(1, Number(role.spots) || 1),
-          }))
+      ? roles.map(normalizeRoleInput).filter(Boolean)
       : [];
 
     const project = await Project.create({
@@ -204,6 +295,86 @@ router.post('/', protect, async (req, res) => {
   }
 });
 
+// @desc    Apply to an open project role
+// @route   POST /api/project/:id/apply
+// @access  Private
+router.post('/:id/apply', protect, async (req, res) => {
+  try {
+    const roleTitleInput = String(req.body?.roleTitle || '').trim();
+    if (!roleTitleInput) {
+      return res.status(400).json({ error: 'roleTitle is required to apply' });
+    }
+
+    const project = await Project.findById(req.params.id);
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    const ownerId = String(project.owner);
+    const applicantId = String(req.user._id);
+
+    if (ownerId === applicantId) {
+      return res.status(400).json({ error: 'Project owner cannot apply to own project' });
+    }
+
+    const isAlreadyMember = (project.members || []).some(
+      (member) => String(member.user) === applicantId
+    );
+    if (isAlreadyMember) {
+      return res.status(400).json({ error: 'You are already a member of this project' });
+    }
+
+    const normalizedRequestedRole = roleTitleInput.toLowerCase();
+    const matchingRole = (project.roles || []).find(
+      (role) => String(role?.title || '').trim().toLowerCase() === normalizedRequestedRole
+    );
+
+    if (!matchingRole) {
+      return res.status(404).json({ error: 'Requested role not found in this project' });
+    }
+
+    if ((Number(matchingRole.spots) || 0) < 1) {
+      return res.status(400).json({ error: 'No spots left for this role' });
+    }
+
+    const existingPendingApplication = await Notification.findOne({
+      recipient: project.owner,
+      sender: req.user._id,
+      project: project._id,
+      type: 'project_application',
+      status: 'pending',
+    });
+
+    if (existingPendingApplication) {
+      return res.status(409).json({ error: 'You already have a pending application for this project' });
+    }
+
+    const applicantName = req.user.name || req.user.email || 'A user';
+    const createdNotification = await Notification.create({
+      recipient: project.owner,
+      sender: req.user._id,
+      type: 'project_application',
+      project: project._id,
+      roleTitle: matchingRole.title,
+      title: 'New Project Application',
+      message: `${applicantName} applied for "${matchingRole.title}" in "${project.title}".`,
+      status: 'pending',
+      isRead: false,
+    });
+
+    return res.status(201).json({
+      message: 'Application submitted successfully',
+      notificationId: String(createdNotification._id),
+    });
+  } catch (error) {
+    if (error?.code === 11000) {
+      return res.status(409).json({ error: 'You already have a pending application for this project' });
+    }
+    console.error('Apply to project error:', error);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // @desc    Fetch current user's projects
 // @route   GET /api/project/my
 // @access  Private
@@ -217,6 +388,62 @@ router.get('/my', protect, async (req, res) => {
     });
   } catch (error) {
     console.error('Fetch my projects error:', error);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// @desc    Fetch Project Bazaar feed (all open roles)
+// @route   GET /api/project/bazaar
+// @access  Private
+router.get('/bazaar', protect, async (req, res) => {
+  try {
+    const projects = await Project.find({
+      status: { $ne: 'Completed' },
+    }).populate('owner', 'name email');
+
+    const items = toBazaarFeedItems(projects, req.query || {});
+
+    return res.status(200).json({
+      items,
+      count: items.length,
+    });
+  } catch (error) {
+    console.error('Fetch project bazaar error:', error);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// @desc    Add an open role to project (owner only)
+// @route   POST /api/project/:id/roles
+// @access  Private
+router.post('/:id/roles', protect, async (req, res) => {
+  try {
+    const normalizedRole = normalizeRoleInput(req.body || {});
+    if (!normalizedRole) {
+      return res.status(400).json({ error: 'Role title is required' });
+    }
+
+    const project = await Project.findById(req.params.id)
+      .populate('owner', 'name email')
+      .populate('members.user', 'name email');
+
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    if (String(project.owner?._id || project.owner) !== String(req.user._id)) {
+      return res.status(403).json({ error: 'Only the project owner can post open roles' });
+    }
+
+    project.roles.push(normalizedRole);
+    await project.save();
+
+    return res.status(201).json({
+      message: 'Open role posted successfully',
+      project: toProjectDetail(project, req.user),
+    });
+  } catch (error) {
+    console.error('Post open role error:', error);
     return res.status(500).json({ error: 'Server error' });
   }
 });

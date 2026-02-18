@@ -13,7 +13,12 @@ function toNotificationResponse(notification) {
 
   return {
     id: String(notification._id),
-    type: notification.type === 'project_invite' ? 'invite' : 'alert',
+    type:
+      notification.type === 'project_invite'
+        ? 'invite'
+        : notification.type === 'project_application'
+        ? 'application'
+        : 'alert',
     rawType: notification.type,
     title: notification.title || 'Notification',
     message: notification.message || '',
@@ -21,6 +26,7 @@ function toNotificationResponse(notification) {
     isRead: Boolean(notification.isRead),
     status: notification.status || 'pending',
     inviteRole: notification.inviteRole || 'Contributor',
+    roleTitle: notification.roleTitle || '',
     sender: {
       id: senderId ? String(senderId) : '',
       name: sender?.name || sender?.email || 'Unknown',
@@ -105,7 +111,7 @@ router.patch('/:id/read', protect, async (req, res) => {
   }
 });
 
-// @desc    Accept a project invite notification
+// @desc    Accept a project invite/application notification
 // @route   POST /api/notification/:id/accept
 // @access  Private
 router.post('/:id/accept', protect, async (req, res) => {
@@ -119,7 +125,7 @@ router.post('/:id/accept', protect, async (req, res) => {
       return res.status(404).json({ error: 'Notification not found' });
     }
 
-    if (notification.type !== 'project_invite') {
+    if (!['project_invite', 'project_application'].includes(notification.type)) {
       return res.status(400).json({ error: 'This notification cannot be accepted' });
     }
 
@@ -132,19 +138,73 @@ router.post('/:id/accept', protect, async (req, res) => {
       return res.status(404).json({ error: 'Project not found' });
     }
 
-    const isOwner = String(project.owner) === String(req.user._id);
-    const isAlreadyMember = (project.members || []).some(
-      (member) => String(member.user) === String(req.user._id)
-    );
+    if (notification.type === 'project_invite') {
+      const isOwner = String(project.owner) === String(req.user._id);
+      const isAlreadyMember = (project.members || []).some(
+        (member) => String(member.user) === String(req.user._id)
+      );
 
-    if (!isOwner && !isAlreadyMember) {
-      project.members.push({
-        user: req.user._id,
-        role: notification.inviteRole || 'Contributor',
-        joinedAt: new Date(),
+      if (!isOwner && !isAlreadyMember) {
+        project.members.push({
+          user: req.user._id,
+          role: notification.inviteRole || 'Contributor',
+          joinedAt: new Date(),
+        });
+        project.teamSize = 1 + project.members.length;
+        await project.save();
+      }
+    }
+
+    if (notification.type === 'project_application') {
+      if (String(project.owner) !== String(req.user._id)) {
+        return res.status(403).json({ error: 'Only the project owner can accept applications' });
+      }
+
+      const applicantId = String(notification.sender);
+      const isAlreadyMember = (project.members || []).some(
+        (member) => String(member.user) === applicantId
+      );
+
+      if (!isAlreadyMember) {
+        const requestedRoleTitle = String(notification.roleTitle || '').trim();
+        const matchedRole = requestedRoleTitle
+          ? (project.roles || []).find(
+              (role) =>
+                String(role?.title || '').trim().toLowerCase() ===
+                requestedRoleTitle.toLowerCase()
+            )
+          : null;
+
+        if (matchedRole && (Number(matchedRole.spots) || 0) < 1) {
+          return res.status(400).json({ error: 'No spots left for this role' });
+        }
+
+        project.members.push({
+          user: notification.sender,
+          role: requestedRoleTitle || 'Contributor',
+          joinedAt: new Date(),
+        });
+
+        if (matchedRole) {
+          matchedRole.spots = Math.max(0, (Number(matchedRole.spots) || 0) - 1);
+        }
+
+        project.teamSize = 1 + project.members.length;
+        await project.save();
+      }
+
+      const ownerName = req.user.name || req.user.email || 'Project Owner';
+      await Notification.create({
+        recipient: notification.sender,
+        sender: req.user._id,
+        type: 'project_application',
+        project: project._id,
+        roleTitle: notification.roleTitle || '',
+        title: 'Application Accepted',
+        message: `${ownerName} accepted your application for "${notification.roleTitle || 'Contributor'}" in "${project.title}".`,
+        status: 'accepted',
+        isRead: false,
       });
-      project.teamSize = 1 + project.members.length;
-      await project.save();
     }
 
     const now = new Date();
@@ -157,7 +217,10 @@ router.post('/:id/accept', protect, async (req, res) => {
     await notification.populate('project', 'title');
 
     return res.status(200).json({
-      message: 'Invite accepted successfully',
+      message:
+        notification.type === 'project_application'
+          ? 'Application accepted successfully'
+          : 'Invite accepted successfully',
       projectId: String(project._id),
       notification: toNotificationResponse(notification),
     });
@@ -167,7 +230,7 @@ router.post('/:id/accept', protect, async (req, res) => {
   }
 });
 
-// @desc    Reject a project invite notification
+// @desc    Reject a project invite/application notification
 // @route   POST /api/notification/:id/reject
 // @access  Private
 router.post('/:id/reject', protect, async (req, res) => {
@@ -181,7 +244,7 @@ router.post('/:id/reject', protect, async (req, res) => {
       return res.status(404).json({ error: 'Notification not found' });
     }
 
-    if (notification.type !== 'project_invite') {
+    if (!['project_invite', 'project_application'].includes(notification.type)) {
       return res.status(400).json({ error: 'This notification cannot be rejected' });
     }
 
@@ -199,7 +262,10 @@ router.post('/:id/reject', protect, async (req, res) => {
     await notification.populate('project', 'title');
 
     return res.status(200).json({
-      message: 'Invite rejected',
+      message:
+        notification.type === 'project_application'
+          ? 'Application rejected'
+          : 'Invite rejected',
       notification: toNotificationResponse(notification),
     });
   } catch (error) {
