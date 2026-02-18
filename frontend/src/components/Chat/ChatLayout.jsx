@@ -1,81 +1,205 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import ChatSidebar from './ChatSidebar';
 import ChatWindow from './ChatWindow';
+import io from 'socket.io-client';
+
+const ENDPOINT = "http://localhost:5000";
+var socket;
 
 const ChatLayout = () => {
-    const [activeConversationId, setActiveConversationId] = useState(1);
-    const [searchQuery, setSearchQuery] = useState('');
+    const selectedChatRef = useRef(null);
+    const [selectedChat, setSelectedChat] = useState();
+    const [chats, setChats] = useState([]);
+    const [user, setUser] = useState();
+    const [messages, setMessages] = useState([]);
+    const [searchQuery, setSearchQuery] = useState("");
+    const [socketConnected, setSocketConnected] = useState(false);
+    const [loading, setLoading] = useState(false);
 
-    // Mock Data
-    const currentUser = {
-        id: 'me',
-        name: 'Alex Johnson',
-        avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=100&q=80'
+    useEffect(() => {
+        const userInfo = JSON.parse(localStorage.getItem("authUser"));
+        setUser(userInfo);
+    }, []);
+
+    useEffect(() => {
+        if (user) {
+            socket = io(ENDPOINT);
+            const normalizedUser = {
+                ...user,
+                _id: user._id || user.id,
+            };
+
+            socket.emit("setup", normalizedUser);
+            socket.on("connected", () => setSocketConnected(true));
+
+            const syncChatPreview = (newMessageRecieved) => {
+                const chatId = newMessageRecieved?.chat?._id;
+                if (!chatId) return;
+
+                setChats((prev) => {
+                    const updated = prev.map((chat) =>
+                        chat._id === chatId ? { ...chat, lastMessage: newMessageRecieved } : chat
+                    );
+
+                    const target = updated.find((chat) => chat._id === chatId);
+                    if (!target) return updated;
+
+                    return [target, ...updated.filter((chat) => chat._id !== chatId)];
+                });
+            };
+
+            const handleMessageReceived = (newMessageRecieved) => {
+                syncChatPreview(newMessageRecieved);
+
+                if (
+                    !selectedChatRef.current ||
+                    selectedChatRef.current._id !== newMessageRecieved?.chat?._id
+                ) {
+                    // give notification
+                    return;
+                }
+
+                setMessages((prev) => [...prev, newMessageRecieved]);
+            };
+
+            socket.on("message received", handleMessageReceived);
+
+            return () => {
+                socket.off("connected");
+                socket.off("message received", handleMessageReceived);
+                socket.disconnect();
+            };
+        }
+    }, [user]);
+
+    const fetchChats = async () => {
+        try {
+            const token = localStorage.getItem("authToken");
+
+            const response = await fetch("http://localhost:5000/api/chat", {
+                method: "GET",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+            const data = await response.json();
+            setChats(data);
+        } catch (error) {
+            console.error("Failed to load the chats", error);
+        }
     };
 
-    const conversations = [
-        {
-            id: 1,
-            name: 'Sarah Chen',
-            avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330',
-            lastMessage: 'Hey! Are we still on for the meeting tomorrow?',
-            lastMessageTime: '10:30 AM',
-            unread: 2,
-            online: true,
-            messages: [
-                { id: 1, text: 'Hi Alex, how is the project coming along?', sender: 'Sarah Chen', timestamp: '10:00 AM', isMe: false },
-                { id: 2, text: 'Making good progress! Just finishing up the dashboard.', sender: 'Me', timestamp: '10:15 AM', isMe: true },
-                { id: 3, text: 'That sounds great! Can we review it tomorrow?', sender: 'Sarah Chen', timestamp: '10:25 AM', isMe: false },
-                { id: 4, text: 'Hey! Are we still on for the meeting tomorrow?', sender: 'Sarah Chen', timestamp: '10:30 AM', isMe: false },
-            ]
-        },
-        {
-            id: 2,
-            name: 'EcoTrack Team',
-            avatar: 'https://ui-avatars.com/api/?name=Eco+Track&background=0D8ABC&color=fff',
-            lastMessage: 'Mike: I just pushed the latest changes to main.',
-            lastMessageTime: 'Yesterday',
-            unread: 0,
-            online: false,
-            messages: [
-                { id: 1, text: 'Welcome to the team everyone!', sender: 'Sarah Chen', timestamp: 'Yesterday', isMe: false },
-                { id: 2, text: 'Excited to be here!', sender: 'Me', timestamp: 'Yesterday', isMe: true },
-                { id: 3, text: 'I just pushed the latest changes to main.', sender: 'Mike Ross', timestamp: 'Yesterday', isMe: false },
-            ]
-        },
-        {
-            id: 3,
-            name: 'Jessica Lee',
-            avatar: 'https://images.unsplash.com/photo-1580489944761-15a19d654956',
-            lastMessage: 'Thanks for the feedback!',
-            lastMessageTime: 'Mon',
-            unread: 0,
-            online: true,
-            messages: [
-                { id: 1, text: 'Here are the design mockups needed for the landing page.', sender: 'Jessica Lee', timestamp: 'Mon', isMe: false },
-                { id: 2, text: 'Looks clean! I like the color palette.', sender: 'Me', timestamp: 'Mon', isMe: true },
-                { id: 3, text: 'Thanks for the feedback!', sender: 'Jessica Lee', timestamp: 'Mon', isMe: false },
-            ]
-        }
-    ];
+    useEffect(() => {
+        if (user) fetchChats();
+    }, [user]);
 
-    const activeConversation = conversations.find(c => c.id === activeConversationId);
+    const accessChat = async (userId) => {
+        try {
+            setLoading(true);
+            const token = localStorage.getItem("authToken");
+
+            const response = await fetch("http://localhost:5000/api/chat", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({ userId }),
+            });
+            const data = await response.json();
+
+            if (!chats.find((c) => c._id === data._id)) setChats([data, ...chats]);
+            setSelectedChat(data);
+            setLoading(false);
+            setSearchQuery(""); // Clear search after selection
+        } catch (error) {
+            console.error("Error fetching the chat", error);
+            setLoading(false);
+        }
+    };
+
+    const fetchMessages = async () => {
+        if (!selectedChat) return;
+
+        try {
+            const token = localStorage.getItem("authToken");
+
+            const response = await fetch(`http://localhost:5000/api/message/${selectedChat._id}`, {
+                method: "GET",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+            const data = await response.json();
+            setMessages(data);
+            if (socket) {
+                socket.emit("join chat", selectedChat._id);
+            }
+        } catch (error) {
+            console.error("Failed to load the messages", error);
+        }
+    };
+
+    useEffect(() => {
+        fetchMessages();
+        selectedChatRef.current = selectedChat;
+    }, [selectedChat]);
+
+    const sendMessage = async (content) => {
+        try {
+            const token = localStorage.getItem("authToken");
+
+            const response = await fetch("http://localhost:5000/api/message", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    content: content,
+                    chatId: selectedChat._id,
+                }),
+            });
+            const data = await response.json();
+
+            socket.emit("new message", data);
+            setMessages((prev) => [...prev, data]);
+            setChats((prev) => {
+                const updated = prev.map((chat) =>
+                    chat._id === data?.chat?._id ? { ...chat, lastMessage: data } : chat
+                );
+                const target = updated.find((chat) => chat._id === data?.chat?._id);
+                if (!target) return updated;
+                return [target, ...updated.filter((chat) => chat._id !== data?.chat?._id)];
+            });
+            return true;
+        } catch (error) {
+            console.error("Failed to send the message", error);
+            return false;
+        }
+    };
 
     return (
         <div className="flex h-[calc(100vh-8rem)] bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             <ChatSidebar
-                conversations={conversations}
-                activeId={activeConversationId}
-                onSelect={(conv) => setActiveConversationId(conv.id)}
+                conversations={chats}
+                activeId={selectedChat?._id}
+                onSelect={(chat) => setSelectedChat(chat)}
                 searchQuery={searchQuery}
                 setSearchQuery={setSearchQuery}
+                user={user}
+                accessChat={accessChat}
             />
             <ChatWindow
-                activeConversation={activeConversation}
-                currentUser={currentUser}
+                activeConversation={selectedChat}
+                currentUser={user}
+                messages={messages}
+                onSend={sendMessage}
+                connectionStatus={socketConnected ? 'connected' : 'connecting'}
             />
         </div>
     );
 };
+
 
 export default ChatLayout;

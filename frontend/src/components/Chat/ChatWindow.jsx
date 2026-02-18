@@ -2,9 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Paperclip, MoreVertical, Phone, Video } from 'lucide-react';
 import MessageBubble from './MessageBubble';
 
-const ChatWindow = ({ activeConversation, currentUser }) => {
+const ChatWindow = ({ activeConversation, currentUser, messages, onSend, connectionStatus }) => {
     const [newMessage, setNewMessage] = useState('');
-    const [messages, setMessages] = useState(activeConversation?.messages || []);
     const messagesEndRef = useRef(null);
 
     const scrollToBottom = () => {
@@ -12,9 +11,8 @@ const ChatWindow = ({ activeConversation, currentUser }) => {
     };
 
     useEffect(() => {
-        setMessages(activeConversation?.messages || []);
         scrollToBottom();
-    }, [activeConversation]);
+    }, [activeConversation?._id]);
 
     useEffect(() => {
         scrollToBottom();
@@ -24,17 +22,25 @@ const ChatWindow = ({ activeConversation, currentUser }) => {
         e.preventDefault();
         if (!newMessage.trim()) return;
 
-        const message = {
-            id: Date.now(),
-            text: newMessage,
-            sender: 'You',
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            isMe: true
-        };
-
-        setMessages([...messages, message]);
-        setNewMessage('');
+        const sent = onSend(newMessage);
+        if (sent) {
+            setNewMessage('');
+        }
     };
+
+    const getOtherUser = () => {
+        if (!activeConversation || !activeConversation.participants || !currentUser) return null;
+        // Check if participants is an array and has at least 2 elements
+        if (!Array.isArray(activeConversation.participants) || activeConversation.participants.length < 2) return null;
+
+        const currentUserId = currentUser.id || currentUser._id;
+
+        return activeConversation.participants[0]._id === currentUserId
+            ? activeConversation.participants[1]
+            : activeConversation.participants[0];
+    };
+
+    const otherUser = getOtherUser();
 
     if (!activeConversation) {
         return (
@@ -54,18 +60,19 @@ const ChatWindow = ({ activeConversation, currentUser }) => {
                 <div className="flex items-center gap-3">
                     <div className="relative">
                         <img
-                            src={activeConversation.avatar}
-                            alt={activeConversation.name}
+                            src={otherUser?.avatar || "https://icon-library.com/images/anonymous-avatar-icon/anonymous-avatar-icon-25.jpg"}
+                            alt={otherUser?.name}
                             className="w-10 h-10 rounded-full object-cover"
                         />
-                        {activeConversation.online && (
-                            <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 border-2 border-white rounded-full"></span>
-                        )}
+                        {/* Online status indicator can be added here if we have real-time online status */}
                     </div>
                     <div>
-                        <h3 className="font-bold text-gray-900 leading-tight">{activeConversation.name}</h3>
-                        <span className="text-xs text-green-600 font-medium">
-                            {activeConversation.online ? 'Online' : 'Offline'}
+                        <h3 className="font-bold text-gray-900 leading-tight">{otherUser?.name || "Chat"}</h3>
+                        <span className={`text-xs font-medium ${connectionStatus === 'connected'
+                            ? 'text-green-600'
+                            : 'text-amber-600'
+                            }`}>
+                            {connectionStatus === 'connected' ? 'Online' : 'Connecting...'}
                         </span>
                     </div>
                 </div>
@@ -79,11 +86,16 @@ const ChatWindow = ({ activeConversation, currentUser }) => {
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-slate-50">
-                {messages.map((msg) => (
+                {messages && messages.map((msg) => (
                     <MessageBubble
-                        key={msg.id}
+                        key={msg._id || msg.id}
                         {...msg}
-                        avatar={msg.isMe ? currentUser.avatar : activeConversation.avatar}
+                        isMe={msg.sender._id === (currentUser.id || currentUser._id)}
+                        avatar={
+                            (msg.sender._id === (currentUser.id || currentUser._id))
+                                ? (currentUser.avatar || "https://icon-library.com/images/anonymous-avatar-icon/anonymous-avatar-icon-25.jpg")
+                                : (msg.sender.avatar || "https://icon-library.com/images/anonymous-avatar-icon/anonymous-avatar-icon-25.jpg")
+                        }
                     />
                 ))}
                 <div ref={messagesEndRef} />
@@ -100,16 +112,17 @@ const ChatWindow = ({ activeConversation, currentUser }) => {
                         type="text"
                         value={newMessage}
                         onChange={(e) => setNewMessage(e.target.value)}
-                        placeholder="Type a message..."
+                        placeholder={connectionStatus === 'connected' ? "Type a message..." : "Connecting to chat server..."}
+                        disabled={connectionStatus !== 'connected'}
                         className="flex-1 bg-gray-50 border border-gray-200 rounded-full px-6 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium text-gray-700"
                     />
 
                     <button
                         type="submit"
-                        disabled={!newMessage.trim()}
-                        className={`p-3 rounded-full transition-all ${newMessage.trim()
-                                ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-md transform hover:scale-105'
-                                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        disabled={!newMessage.trim() || connectionStatus !== 'connected'}
+                        className={`p-3 rounded-full transition-all ${newMessage.trim() && connectionStatus === 'connected'
+                            ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-md transform hover:scale-105'
+                            : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                             }`}
                     >
                         <Send size={18} />
