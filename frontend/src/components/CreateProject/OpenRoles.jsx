@@ -50,6 +50,7 @@ const OpenRoles = ({ formData, updateFormData }) => {
                         />
                     </div>
                     <button
+                        type="button"
                         onClick={handleAddRole}
                         disabled={!newRole.title || !newRole.skills}
                         className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -78,6 +79,7 @@ const OpenRoles = ({ formData, updateFormData }) => {
                                     {role.spots} Spot{role.spots > 1 ? 's' : ''}
                                 </span>
                                 <button
+                                    type="button"
                                     onClick={() => handleRemoveRole(role.id)}
                                     className="text-gray-400 hover:text-red-500 transition-colors"
                                 >

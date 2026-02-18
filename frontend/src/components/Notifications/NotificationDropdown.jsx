@@ -3,41 +3,44 @@ import { Bell } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import NotificationItem from './NotificationItem';
+import { API_BASE_URL } from '../../config/api';
 
 const NotificationDropdown = () => {
     const [isOpen, setIsOpen] = useState(false);
+    const [notifications, setNotifications] = useState([]);
     const dropdownRef = useRef(null);
     const navigate = useNavigate();
 
-    // Mock Data
-    const notifications = [
-        {
-            id: 1,
-            type: 'invite',
-            title: 'Project Invitation',
-            message: 'Sarah invited you to join "EcoTrack SaaS" as Frontend Lead.',
-            time: new Date(Date.now() - 1000 * 60 * 30), // 30 mins ago
-            isRead: false
-        },
-        {
-            id: 2,
-            type: 'message',
-            title: 'New Message',
-            message: 'Mike Ross: "I just pushed the changes, can you review?"',
-            time: new Date(Date.now() - 1000 * 60 * 60 * 2), // 2 hours ago
-            isRead: false
-        },
-        {
-            id: 3,
-            type: 'match',
-            title: 'New Match Found',
-            message: 'Your profile matches 95% with a new project "DeFi Dashboard".',
-            time: new Date(Date.now() - 1000 * 60 * 60 * 5), // 5 hours ago
-            isRead: true
+    const getAuthHeaders = () => {
+        const token = localStorage.getItem('authToken');
+        return {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+        };
+    };
+
+    const fetchNotifications = async () => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/notification`, {
+                headers: getAuthHeaders(),
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to fetch notifications');
+            }
+            setNotifications(Array.isArray(data.notifications) ? data.notifications : []);
+        } catch (_error) {
+            setNotifications([]);
         }
-    ];
+    };
 
     const unreadCount = notifications.filter(n => !n.isRead).length;
+
+    useEffect(() => {
+        fetchNotifications();
+        const interval = setInterval(fetchNotifications, 15000);
+        return () => clearInterval(interval);
+    }, []);
 
     useEffect(() => {
         const handleClickOutside = (event) => {
@@ -49,9 +52,56 @@ const NotificationDropdown = () => {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
+    useEffect(() => {
+        if (isOpen) {
+            fetchNotifications();
+        }
+    }, [isOpen]);
+
     const handleViewAll = () => {
         setIsOpen(false);
         navigate('/notifications');
+    };
+
+    const handleMarkAllRead = async () => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/notification/mark-all-read`, {
+                method: 'PATCH',
+                headers: getAuthHeaders(),
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to mark all as read');
+            }
+            setNotifications((current) =>
+                current.map((notification) => ({ ...notification, isRead: true }))
+            );
+        } catch (_error) {
+            // Non-blocking in dropdown.
+        }
+    };
+
+    const handleNotificationClick = async (notificationId, isRead) => {
+        if (isRead) return;
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/notification/${notificationId}/read`, {
+                method: 'PATCH',
+                headers: getAuthHeaders(),
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to mark notification as read');
+            }
+            setNotifications((current) =>
+                current.map((notification) =>
+                    notification.id === notificationId
+                        ? { ...notification, ...data.notification }
+                        : notification
+                )
+            );
+        } catch (_error) {
+            // Non-blocking in dropdown.
+        }
     };
 
     return (
@@ -78,7 +128,7 @@ const NotificationDropdown = () => {
                         <div className="px-4 py-3 border-b border-gray-50 flex justify-between items-center bg-gray-50/50">
                             <h3 className="font-semibold text-gray-900">Notifications</h3>
                             <button
-                                onClick={() => { }}
+                                onClick={handleMarkAllRead}
                                 className="text-xs text-blue-600 hover:text-blue-700 font-medium"
                             >
                                 Mark all as read
@@ -87,11 +137,13 @@ const NotificationDropdown = () => {
 
                         <div className="max-h-[70vh] overflow-y-auto">
                             {notifications.length > 0 ? (
-                                notifications.map(notification => (
+                                notifications.slice(0, 5).map(notification => (
                                     <NotificationItem
                                         key={notification.id}
                                         {...notification}
-                                        onClick={() => { }} // Handle click
+                                        onClick={() =>
+                                            handleNotificationClick(notification.id, notification.isRead)
+                                        }
                                     />
                                 ))
                             ) : (

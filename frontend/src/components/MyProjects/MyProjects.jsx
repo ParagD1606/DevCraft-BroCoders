@@ -1,12 +1,16 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Folder, Plus } from 'lucide-react';
+import { Folder, Loader2, Plus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import ProjectCard from './ProjectCard';
+import { API_BASE_URL } from '../../config/api';
 
 const MyProjects = () => {
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState('active');
+    const [projects, setProjects] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
 
     const tabs = [
         { id: 'active', label: 'Active Projects' },
@@ -14,53 +18,33 @@ const MyProjects = () => {
         { id: 'completed', label: 'Completed' }
     ];
 
-    // Mock Data
-    const projects = [
-        {
-            id: 1,
-            title: 'EcoTrack SaaS Platform',
-            status: 'In Progress',
-            role: 'Frontend Lead',
-            description: 'A sustainability tracking platform for small businesses to monitor carbon footprint.',
-            teamSize: 4,
-            dueDate: 'Dec 20, 2024',
-            progress: 75,
-            type: 'active'
-        },
-        {
-            id: 2,
-            title: 'DeFi Dashboard',
-            status: 'Review',
-            role: 'Contributor',
-            description: 'Web3 dashboard for tracking decentralized finance investments and liquidity pools.',
-            teamSize: 3,
-            dueDate: 'Nov 15, 2024',
-            progress: 90,
-            type: 'active'
-        },
-        {
-            id: 3,
-            title: 'AI Content Generator',
-            status: 'Pending',
-            role: 'Pending Approval',
-            description: 'Generating blog posts and social media captions using GPT-4.',
-            teamSize: 2,
-            dueDate: 'Jan 10, 2025',
-            progress: 0,
-            type: 'pending'
-        },
-        {
-            id: 4,
-            title: 'Portfolio Website v1',
-            status: 'Completed',
-            role: 'Owner',
-            description: 'Personal portfolio website showcasing projects and skills.',
-            teamSize: 1,
-            dueDate: 'Oct 01, 2024',
-            progress: 100,
-            type: 'completed'
-        }
-    ];
+    useEffect(() => {
+        const fetchProjects = async () => {
+            setLoading(true);
+            setError('');
+            try {
+                const token = localStorage.getItem('authToken');
+                const response = await fetch(`${API_BASE_URL}/api/project/my`, {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                });
+
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to fetch projects');
+                }
+
+                setProjects(Array.isArray(data.projects) ? data.projects : []);
+            } catch (fetchError) {
+                setError(fetchError.message || 'Failed to fetch projects');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchProjects();
+    }, []);
 
     const filteredProjects = projects.filter(p => p.type === activeTab);
 
@@ -101,8 +85,20 @@ const MyProjects = () => {
                 ))}
             </div>
 
-            {/* Grid */}
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6">
+            {error ? (
+                <div className="mb-6 bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 text-sm">
+                    {error}
+                </div>
+            ) : null}
+
+            {loading ? (
+                <div className="py-20 flex items-center justify-center text-gray-500">
+                    <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                    Loading your projects...
+                </div>
+            ) : (
+                /* Grid */
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6">
                 <AnimatePresence mode="popLayout">
                     {filteredProjects.map(project => (
                         <motion.div
@@ -128,7 +124,8 @@ const MyProjects = () => {
                         <p>No projects found in this category.</p>
                     </motion.div>
                 )}
-            </div>
+                </div>
+            )}
         </div>
     );
 };

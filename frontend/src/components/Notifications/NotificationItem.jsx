@@ -2,7 +2,16 @@ import React from 'react';
 import { Bell, MessageSquare, UserPlus, Star, Info } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
-const NotificationItem = ({ type, title, message, time, isRead, onClick }) => {
+const NotificationItem = ({
+    type,
+    title,
+    message,
+    time,
+    isRead,
+    status,
+    onClick,
+    actions = [],
+}) => {
     const getIcon = () => {
         switch (type) {
             case 'alert': return <Info size={16} className="text-blue-500" />;
@@ -26,7 +35,7 @@ const NotificationItem = ({ type, title, message, time, isRead, onClick }) => {
     return (
         <div
             onClick={onClick}
-            className={`p-4 flex gap-3 hover:bg-gray-50 transition-colors cursor-pointer border-b border-gray-50 last:border-0 ${!isRead ? 'bg-blue-50/30' : ''
+            className={`p-4 flex gap-3 hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-0 ${onClick ? 'cursor-pointer' : 'cursor-default'} ${!isRead ? 'bg-blue-50/30' : ''
                 }`}
         >
             <div className={`mt-1 w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${getBgColor()}`}>
@@ -43,6 +52,37 @@ const NotificationItem = ({ type, title, message, time, isRead, onClick }) => {
                     </span>
                 </div>
                 <p className="text-sm text-gray-500 line-clamp-2">{message}</p>
+
+                {type === 'invite' && status && status !== 'pending' ? (
+                    <p
+                        className={`mt-2 text-xs font-semibold uppercase tracking-wide ${status === 'accepted' ? 'text-green-600' : 'text-red-600'
+                            }`}
+                    >
+                        {status}
+                    </p>
+                ) : null}
+
+                {actions.length > 0 ? (
+                    <div className="mt-3 flex items-center gap-2">
+                        {actions.map((action) => (
+                            <button
+                                key={action.label}
+                                type="button"
+                                disabled={action.disabled}
+                                onClick={(event) => {
+                                    event.stopPropagation();
+                                    action.onClick?.();
+                                }}
+                                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${action.variant === 'secondary'
+                                        ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                        : 'bg-blue-600 text-white hover:bg-blue-700'
+                                    } disabled:opacity-60 disabled:cursor-not-allowed`}
+                            >
+                                {action.label}
+                            </button>
+                        ))}
+                    </div>
+                ) : null}
             </div>
 
             {!isRead && (

@@ -5,11 +5,13 @@ import OpenRoles from './OpenRoles';
 import ProjectTimeline from './ProjectTimeline';
 import { CheckCircle, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { API_BASE_URL } from '../../config/api';
 
 const CreateProject = () => {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
+    const [error, setError] = useState('');
 
     const [formData, setFormData] = useState({
         title: '',
@@ -25,20 +27,51 @@ const CreateProject = () => {
         setFormData(prev => ({ ...prev, [key]: value }));
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
+        setError('');
         setLoading(true);
 
-        // Simulate API call
-        setTimeout(() => {
-            setLoading(false);
-            setSuccess(true);
+        try {
+            const token = localStorage.getItem('authToken');
+            const response = await fetch(`${API_BASE_URL}/api/project`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    title: formData.title,
+                    description: formData.description,
+                    category: formData.category,
+                    startDate: formData.startDate || null,
+                    endDate: formData.endDate || null,
+                    commitment: formData.commitment,
+                    roles: formData.roles.map((role) => ({
+                        title: role.title,
+                        skills: String(role.skills || '')
+                            .split(',')
+                            .map((skill) => skill.trim())
+                            .filter(Boolean),
+                        spots: role.spots,
+                    })),
+                }),
+            });
 
-            // Redirect after showing success
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to create project');
+            }
+
+            setSuccess(true);
             setTimeout(() => {
-                navigate('/dashboard');
+                navigate('/projects');
             }, 2000);
-        }, 1500);
+        } catch (submitError) {
+            setError(submitError.message || 'Failed to create project');
+        } finally {
+            setLoading(false);
+        }
     };
 
     if (success) {
@@ -73,9 +106,10 @@ const CreateProject = () => {
                 </div>
 
                 <div className="flex justify-end pt-6">
+                    {error ? <p className="text-sm text-red-600 mr-auto">{error}</p> : null}
                     <button
                         type="button"
-                        onClick={() => navigate('/dashboard')}
+                        onClick={() => navigate('/projects')}
                         className="px-6 py-3 text-gray-600 hover:bg-gray-100 rounded-xl transition-colors font-medium mr-4"
                     >
                         Cancel

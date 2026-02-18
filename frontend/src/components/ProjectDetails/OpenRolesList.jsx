@@ -9,8 +9,13 @@ const OpenRolesList = ({ roles }) => {
                 Open Positions
             </h3>
 
-            <div className="grid gap-4">
-                {roles.map((role) => (
+            {roles.length === 0 ? (
+                <div className="text-gray-500 text-sm bg-gray-50 border border-gray-100 rounded-xl p-4">
+                    No roles are open for this project yet.
+                </div>
+            ) : (
+                <div className="grid gap-4">
+                    {roles.map((role) => (
                     <div
                         key={role.id}
                         className="group flex flex-col md:flex-row items-start md:items-center justify-between p-4 rounded-xl border border-gray-100 hover:border-blue-200 hover:shadow-md transition-all cursor-pointer bg-gray-50/50 hover:bg-white"
@@ -20,7 +25,7 @@ const OpenRolesList = ({ roles }) => {
                                 {role.title}
                             </h4>
                             <div className="flex flex-wrap gap-2 mt-2">
-                                {role.skills.map(skill => (
+                                {(role.skills || []).map(skill => (
                                     <span key={skill} className="px-2 py-0.5 bg-white border border-gray-200 text-gray-600 text-xs rounded font-medium">
                                         {skill}
                                     </span>
@@ -30,7 +35,7 @@ const OpenRolesList = ({ roles }) => {
 
                         <div className="flex items-center gap-6 w-full md:w-auto justify-between md:justify-end">
                             <div className="text-right">
-                                <div className="text-sm font-bold text-gray-900">{role.commitment}</div>
+                                <div className="text-sm font-bold text-gray-900">{role.commitment || 'Flexible'}</div>
                                 <div className="text-xs text-gray-500">{role.spots} spot{role.spots > 1 ? 's' : ''} left</div>
                             </div>
 
@@ -43,8 +48,9 @@ const OpenRolesList = ({ roles }) => {
                             </button>
                         </div>
                     </div>
-                ))}
-            </div>
+                    ))}
+                </div>
+            )}
         </div>
     );
 };
