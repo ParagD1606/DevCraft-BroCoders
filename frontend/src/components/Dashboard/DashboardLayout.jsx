@@ -33,7 +33,7 @@ const DashboardLayout = ({ children }) => {
             <div className="flex-1 flex flex-col min-w-0 lg:pl-64 transition-all duration-300">
                 <TopBar onMenuClick={() => setIsSidebarOpen(true)} />
 
-                <main className="flex-1 p-4 lg:p-8 overflow-y-auto">
+                <main className="flex-1 p-4 lg:p-8 2xl:p-10 overflow-y-auto">
                     {children}
                 </main>
             </div>

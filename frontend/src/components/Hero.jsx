@@ -11,8 +11,8 @@ const Hero = () => {
                 <div className="absolute bottom-0 right-0 w-[800px] h-[600px] bg-gradient-to-bl from-purple-100 to-pink-100 rounded-full blur-3xl opacity-50"></div>
             </div>
 
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div className="grid lg:grid-cols-2 gap-12 items-center">
+            <div className="max-w-7xl 2xl:max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
+                <div className="grid lg:grid-cols-2 gap-12 2xl:gap-16 items-center">
                     {/* Text Content */}
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
@@ -23,7 +23,7 @@ const Hero = () => {
                             <span className="flex h-2 w-2 rounded-full bg-blue-600 mr-2"></span>
                             v2.0 is now live
                         </div>
-                        <h1 className="text-5xl lg:text-7xl font-bold text-gray-900 leading-tight mb-6">
+                        <h1 className="text-5xl lg:text-7xl 2xl:text-8xl font-bold text-gray-900 leading-tight mb-6">
                             Skill Matching, <br />
                             <span className="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
                                 Reimagined.

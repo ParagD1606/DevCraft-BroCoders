@@ -33,7 +33,7 @@ const ProjectDetails = () => {
     };
 
     return (
-        <div className="max-w-6xl mx-auto space-y-6">
+        <div className="max-w-6xl xl:max-w-7xl 2xl:max-w-screen-2xl mx-auto space-y-6">
             <ProjectHeader project={project} />
 
             <div className="grid lg:grid-cols-3 gap-8">

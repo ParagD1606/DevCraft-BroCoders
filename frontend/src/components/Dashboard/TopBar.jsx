@@ -4,7 +4,7 @@ import NotificationDropdown from '../Notifications/NotificationDropdown';
 
 const TopBar = ({ onMenuClick }) => {
     return (
-        <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 lg:px-8">
+        <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 lg:px-8 2xl:px-10">
             <div className="flex items-center gap-4">
                 <button
                     onClick={onMenuClick}

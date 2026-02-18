@@ -65,7 +65,7 @@ const MyProjects = () => {
     const filteredProjects = projects.filter(p => p.type === activeTab);
 
     return (
-        <div className="max-w-7xl mx-auto">
+        <div className="max-w-7xl 2xl:max-w-screen-2xl mx-auto">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
                 <div>
                     <h1 className="text-3xl font-bold text-gray-900">My Projects</h1>
@@ -102,7 +102,7 @@ const MyProjects = () => {
             </div>
 
             {/* Grid */}
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6">
                 <AnimatePresence mode="popLayout">
                     {filteredProjects.map(project => (
                         <motion.div

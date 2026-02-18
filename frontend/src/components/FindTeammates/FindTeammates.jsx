@@ -100,20 +100,20 @@ const FindTeammates = () => {
     });
 
     return (
-        <div className="max-w-7xl mx-auto">
+        <div className="max-w-7xl 2xl:max-w-screen-2xl mx-auto">
             <div className="mb-8">
                 <h1 className="text-3xl font-bold text-gray-900">Find Teammates</h1>
                 <p className="text-gray-500 mt-2">Discover talented developers, designers, and creators for your next project.</p>
             </div>
 
-            <div className="grid lg:grid-cols-4 gap-8">
+            <div className="grid lg:grid-cols-4 xl:grid-cols-5 gap-8">
                 {/* Sidebar */}
-                <div className="lg:col-span-1">
+                <div className="lg:col-span-1 xl:col-span-1">
                     <FilterSidebar filters={filters} setFilters={setFilters} />
                 </div>
 
                 {/* Main Content */}
-                <div className="lg:col-span-3">
+                <div className="lg:col-span-3 xl:col-span-4">
                     {/* Search Bar */}
                     <div className="relative mb-6">
                         <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
@@ -127,7 +127,7 @@ const FindTeammates = () => {
                     </div>
 
                     {/* Results Grid */}
-                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div className="grid md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6">
                         {filteredTeammates.length > 0 ? (
                             filteredTeammates.map(user => (
                                 <TeammateCard key={user.id} user={user} />

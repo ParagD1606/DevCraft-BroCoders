@@ -15,7 +15,7 @@ const MatchInsights = () => {
     ];
 
     return (
-        <div className="max-w-7xl mx-auto space-y-6">
+        <div className="max-w-7xl 2xl:max-w-screen-2xl mx-auto space-y-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
                 <div>
                     <h1 className="text-3xl font-bold text-gray-900">Match Insights</h1>
@@ -27,14 +27,14 @@ const MatchInsights = () => {
                 </div>
             </div>
 
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6">
                 {/* Score Column */}
                 <div className="lg:col-span-1">
                     <CompatibilityScore score={overallScore} />
                 </div>
 
                 {/* AI Recommendations - Spans 2 cols on lg */}
-                <div className="lg:col-span-2 bg-gradient-to-br from-indigo-600 to-blue-700 rounded-2xl p-8 text-white relative overflow-hidden flex flex-col justify-center shadow-lg">
+                <div className="lg:col-span-2 2xl:col-span-3 bg-gradient-to-br from-indigo-600 to-blue-700 rounded-2xl p-8 text-white relative overflow-hidden flex flex-col justify-center shadow-lg">
                     <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl"></div>
                     <div className="absolute bottom-0 left-0 w-32 h-32 bg-purple-500 opacity-20 rounded-full translate-y-1/2 -translate-x-1/2 blur-2xl"></div>
 
@@ -58,7 +58,7 @@ const MatchInsights = () => {
                 </div>
 
                 {/* Breakdown Row */}
-                <div className="lg:col-span-2">
+                <div className="lg:col-span-2 2xl:col-span-3">
                     <SkillBreakdown skills={skills} />
                 </div>
                 <div className="lg:col-span-1">
