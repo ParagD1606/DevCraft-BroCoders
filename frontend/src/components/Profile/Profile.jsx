@@ -5,6 +5,8 @@ import AvailabilityCalendar from './AvailabilityCalendar';
 import EditProfileModal from './EditProfileModal';
 import { Loader2 } from 'lucide-react';
 import { API_BASE_URL } from '../../config/api';
+import { markdownToHtml } from '../../utils/markdownToHtml';
+import { sanitizeHtml } from '../../utils/sanitizeHtml';
 
 const Profile = () => {
     const [isEditing, setIsEditing] = useState(false);
@@ -13,6 +15,7 @@ const Profile = () => {
     const [error, setError] = useState('');
     const [repos, setRepos] = useState([]);
     const [reposLoading, setReposLoading] = useState(false);
+    const [githubSummary, setGithubSummary] = useState(null);
 
     const readStoredUser = () => {
         try {
@@ -39,6 +42,17 @@ const Profile = () => {
         availability: profile.availability || {},
     });
 
+    const persistAuthUser = (profile) => {
+        const { githubProfileReadme, ...profileWithoutReadme } = profile || {};
+        localStorage.setItem(
+            'authUser',
+            JSON.stringify({
+                ...readStoredUser(),
+                ...profileWithoutReadme,
+            })
+        );
+    };
+
     const fetchProfile = async () => {
         setLoading(true);
         setError('');
@@ -57,13 +71,7 @@ const Profile = () => {
 
             const normalized = normalizeUser(data);
             setUser(normalized);
-            localStorage.setItem(
-                'authUser',
-                JSON.stringify({
-                    ...readStoredUser(),
-                    ...normalized,
-                })
-            );
+            persistAuthUser(normalized);
         } catch (fetchError) {
             setError(fetchError.message);
         } finally {
@@ -77,17 +85,23 @@ const Profile = () => {
         setReposLoading(true);
         try {
             const token = localStorage.getItem('authToken');
-            const response = await fetch(`${API_BASE_URL}/api/user/github/repos`, {
+            const response = await fetch(`${API_BASE_URL}/api/user/github/summary`, {
                 headers: {
                     Authorization: `Bearer ${token}`,
                 },
             });
-            if (response.ok) {
-                const data = await response.json();
-                setRepos(data);
+
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to fetch GitHub summary');
             }
-        } catch (error) {
-            console.error("Failed to fetch repos", error);
+
+            setGithubSummary(data);
+            setRepos(Array.isArray(data?.repos) ? data.repos : []);
+        } catch (fetchError) {
+            console.error("Failed to fetch GitHub summary", fetchError);
+            setGithubSummary(null);
+            setRepos([]);
         } finally {
             setReposLoading(false);
         }
@@ -100,8 +114,56 @@ const Profile = () => {
     useEffect(() => {
         if (user?.githubConnected) {
             fetchRepos();
+        } else {
+            setGithubSummary(null);
+            setRepos([]);
         }
     }, [user?.githubConnected]);
+
+    const topLanguage = useMemo(() => {
+        if (githubSummary?.stats?.topLanguage) {
+            return githubSummary.stats.topLanguage;
+        }
+
+        if (!Array.isArray(repos) || repos.length === 0) {
+            return 'N/A';
+        }
+
+        const languageMap = repos.reduce((acc, repo) => {
+            if (repo.language) {
+                acc[repo.language] = (acc[repo.language] || 0) + 1;
+            }
+            return acc;
+        }, {});
+
+        return Object.entries(languageMap).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A';
+    }, [githubSummary, repos]);
+
+    const githubProfileUrl = useMemo(() => {
+        if (githubSummary?.profile?.html_url) {
+            return githubSummary.profile.html_url;
+        }
+        if (user?.githubUsername) {
+            return `https://github.com/${user.githubUsername}`;
+        }
+        return null;
+    }, [githubSummary, user?.githubUsername]);
+
+    const profileReadme = githubSummary?.profileReadme || user?.githubProfileReadme || null;
+    const profileReadmeHtml = typeof profileReadme?.renderedHtml === 'string'
+        ? profileReadme.renderedHtml.trim()
+        : '';
+    const profileReadmeContent = typeof profileReadme?.content === 'string'
+        ? profileReadme.content.trim()
+        : '';
+    const profileReadmeFallbackHtml = useMemo(
+        () => (profileReadmeContent ? markdownToHtml(profileReadmeContent) : ''),
+        [profileReadmeContent]
+    );
+    const safeProfileReadmeHtml = useMemo(
+        () => sanitizeHtml(profileReadmeHtml || profileReadmeFallbackHtml),
+        [profileReadmeHtml, profileReadmeFallbackHtml]
+    );
 
     const handleSave = async (updatedUser) => {
         const token = localStorage.getItem('authToken');
@@ -132,13 +194,7 @@ const Profile = () => {
 
         const normalized = normalizeUser(data.user);
         setUser(normalized);
-        localStorage.setItem(
-            'authUser',
-            JSON.stringify({
-                ...readStoredUser(),
-                ...normalized,
-            })
-        );
+        persistAuthUser(normalized);
     };
 
     if (loading) {
@@ -164,7 +220,13 @@ const Profile = () => {
 
     return (
         <div className="max-w-6xl xl:max-w-7xl 2xl:max-w-screen-2xl mx-auto space-y-6">
-            <ProfileHeader user={user} onEdit={() => setIsEditing(true)} />
+            <ProfileHeader
+                user={user}
+                onEdit={() => setIsEditing(true)}
+                topLanguage={topLanguage}
+                reposLoading={reposLoading}
+                githubSummary={githubSummary}
+            />
 
             <div className="grid lg:grid-cols-3 gap-6">
                 {/* Left Column - Stats & Availability */}
@@ -184,9 +246,9 @@ const Profile = () => {
                                 </span>
                                 GitHub Repositories
                             </h3>
-                            {user.githubConnected && (
+                            {user.githubConnected && githubProfileUrl && (
                                 <a
-                                    href={`https://github.com/${user.githubUsername}`}
+                                    href={githubProfileUrl}
                                     target="_blank"
                                     rel="noreferrer"
                                     className="text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center gap-1"
@@ -202,37 +264,139 @@ const Profile = () => {
                                 <div className="flex justify-center py-8">
                                     <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
                                 </div>
-                            ) : repos.length > 0 ? (
+                            ) : (
                                 <div className="space-y-4">
-                                    {repos.map((repo) => (
-                                        <div key={repo.id} onClick={() => window.open(repo.html_url, '_blank')} className="group p-4 rounded-xl border border-gray-100 hover:border-blue-200 hover:shadow-sm transition-all cursor-pointer">
-                                            <div className="flex justify-between items-start">
-                                                <div>
-                                                    <h4 className="font-bold text-gray-900 group-hover:text-blue-600 transition-colors mb-1">
-                                                        {repo.name}
-                                                    </h4>
-                                                    <p className="text-sm text-gray-600 mb-2 line-clamp-2">{repo.description || "No description available"}</p>
-
-                                                    <div className="flex items-center gap-4">
-                                                        {repo.language && (
-                                                            <span className="flex items-center gap-1.5 text-xs text-gray-500">
-                                                                <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                                                                {repo.language}
-                                                            </span>
-                                                        )}
-                                                        <span className="flex items-center gap-1 text-xs text-gray-500">
-                                                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                                                            {repo.stargazers_count}
-                                                        </span>
-                                                    </div>
+                                    {githubSummary?.stats ? (
+                                        <div className="space-y-4">
+                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                                <div className="p-3 rounded-xl bg-gray-50 border border-gray-100">
+                                                    <div className="text-xs text-gray-500 mb-1">Public Repos</div>
+                                                    <div className="font-bold text-gray-900">{githubSummary.stats.publicRepos}</div>
+                                                </div>
+                                                <div className="p-3 rounded-xl bg-gray-50 border border-gray-100">
+                                                    <div className="text-xs text-gray-500 mb-1">Followers</div>
+                                                    <div className="font-bold text-gray-900">{githubSummary.stats.followers}</div>
+                                                </div>
+                                                <div className="p-3 rounded-xl bg-gray-50 border border-gray-100">
+                                                    <div className="text-xs text-gray-500 mb-1">Following</div>
+                                                    <div className="font-bold text-gray-900">{githubSummary.stats.following}</div>
+                                                </div>
+                                                <div className="p-3 rounded-xl bg-gray-50 border border-gray-100">
+                                                    <div className="text-xs text-gray-500 mb-1">Total Stars</div>
+                                                    <div className="font-bold text-gray-900">{githubSummary.stats.totalStars}</div>
+                                                </div>
+                                                <div className="p-3 rounded-xl bg-gray-50 border border-gray-100">
+                                                    <div className="text-xs text-gray-500 mb-1">Total Forks</div>
+                                                    <div className="font-bold text-gray-900">{githubSummary.stats.totalForks}</div>
+                                                </div>
+                                                <div className="p-3 rounded-xl bg-gray-50 border border-gray-100">
+                                                    <div className="text-xs text-gray-500 mb-1">Top Language</div>
+                                                    <div className="font-bold text-gray-900">{githubSummary.stats.topLanguage}</div>
                                                 </div>
                                             </div>
+
+                                            <div className="p-3 rounded-xl bg-gray-50 border border-gray-100">
+                                                <div className="text-xs font-semibold text-gray-700 mb-2 uppercase tracking-wide">Top Languages</div>
+                                                {Array.isArray(githubSummary.stats.topLanguages) && githubSummary.stats.topLanguages.length > 0 ? (
+                                                    <div className="h-40 overflow-y-scroll pr-1 space-y-2">
+                                                        {githubSummary.stats.topLanguages.map((entry) => (
+                                                            <div key={entry.language} className="flex items-center justify-between text-sm bg-white rounded-lg px-2.5 py-1.5 border border-gray-100">
+                                                                <span className="text-gray-700">{entry.language}</span>
+                                                                <span className="text-gray-500">{entry.repoCount} repos</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                ) : (
+                                                    <div className="text-xs text-gray-500">No language data available.</div>
+                                                )}
+                                            </div>
+
+                                            <div className="p-3 rounded-xl bg-gray-50 border border-gray-100">
+                                                <div className="flex items-center justify-between gap-2 mb-2">
+                                                    <div className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Profile README</div>
+                                                    {profileReadme?.htmlUrl ? (
+                                                        <a
+                                                            href={profileReadme.htmlUrl}
+                                                            target="_blank"
+                                                            rel="noreferrer"
+                                                            className="text-xs text-blue-600 hover:text-blue-700"
+                                                        >
+                                                            Open on GitHub
+                                                        </a>
+                                                    ) : null}
+                                                </div>
+
+                                                {safeProfileReadmeHtml ? (
+                                                    <div
+                                                        className="text-xs text-gray-700 bg-white border border-gray-100 rounded-lg p-2.5 h-56 overflow-y-scroll leading-relaxed
+                                                        [&_h1]:text-lg [&_h1]:font-semibold [&_h1]:mb-2
+                                                        [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mb-2
+                                                        [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mb-1.5
+                                                        [&_p]:mb-2 [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-5 [&_ol]:pl-5 [&_li]:mb-1
+                                                        [&_code]:bg-gray-100 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded
+                                                        [&_pre]:bg-gray-100 [&_pre]:rounded [&_pre]:p-2 [&_pre]:overflow-x-auto
+                                                        [&_a]:text-blue-600 [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-gray-300 [&_blockquote]:pl-3"
+                                                        dangerouslySetInnerHTML={{ __html: safeProfileReadmeHtml }}
+                                                    />
+                                                ) : (
+                                                    <div className="text-xs text-gray-500">
+                                                        No GitHub profile README found yet.
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="text-center py-8 bg-gray-50 rounded-xl">
-                                    <p className="text-gray-500">No public repositories found</p>
+                                    ) : null}
+
+                                    {repos.length > 0 ? (
+                                        <div className="h-[460px] overflow-y-scroll pr-1 space-y-4">
+                                            {repos.map((repo) => (
+                                                <div key={repo.id} onClick={() => window.open(repo.html_url, '_blank')} className="group p-4 rounded-xl border border-gray-100 hover:border-blue-200 hover:shadow-sm transition-all cursor-pointer">
+                                                    <div className="flex justify-between items-start">
+                                                        <div>
+                                                            <h4 className="font-bold text-gray-900 group-hover:text-blue-600 transition-colors mb-1">
+                                                                {repo.name}
+                                                            </h4>
+                                                            <p className="text-sm text-gray-600 mb-2 line-clamp-2">{repo.description || "No description available"}</p>
+                                                            {Array.isArray(repo.topics) && repo.topics.length > 0 ? (
+                                                                <div className="flex flex-wrap gap-1.5 mb-2">
+                                                                    {repo.topics.slice(0, 4).map((topic) => (
+                                                                        <span key={topic} className="px-2 py-0.5 text-[11px] bg-gray-100 text-gray-600 rounded-md">
+                                                                            #{topic}
+                                                                        </span>
+                                                                    ))}
+                                                                </div>
+                                                            ) : null}
+
+                                                            <div className="flex items-center gap-4">
+                                                                {repo.language && (
+                                                                    <span className="flex items-center gap-1.5 text-xs text-gray-500">
+                                                                        <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                                                                        {repo.language}
+                                                                    </span>
+                                                                )}
+                                                                <span className="flex items-center gap-1 text-xs text-gray-500">
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                                                                    {repo.stargazers_count}
+                                                                </span>
+                                                                <span className="flex items-center gap-1 text-xs text-gray-500">
+                                                                    Forks: {repo.forks_count || 0}
+                                                                </span>
+                                                                {repo.updated_at ? (
+                                                                    <span className="text-xs text-gray-500">
+                                                                        Updated {new Date(repo.updated_at).toLocaleDateString()}
+                                                                    </span>
+                                                                ) : null}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="text-center py-8 bg-gray-50 rounded-xl">
+                                            <p className="text-gray-500">No public repositories found</p>
+                                        </div>
+                                    )}
                                 </div>
                             )
                         ) : (

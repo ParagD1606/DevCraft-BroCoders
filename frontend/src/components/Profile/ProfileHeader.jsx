@@ -1,8 +1,10 @@
 import React from 'react';
 import { MapPin, Link as LinkIcon, Edit2, CheckCircle } from 'lucide-react';
 
-const ProfileHeader = ({ user, onEdit }) => {
+const ProfileHeader = ({ user, onEdit, topLanguage, reposLoading, githubSummary }) => {
     const heading = user.role || user.qualifications || 'Member';
+    const githubHandle = githubSummary?.profile?.login || user.githubUsername;
+    const githubFollowers = githubSummary?.stats?.followers;
 
     return (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6">
@@ -41,6 +43,13 @@ const ProfileHeader = ({ user, onEdit }) => {
                     <div className="mt-2 text-sm text-gray-500 flex flex-wrap gap-4">
                         {user.age ? <span>Age: {user.age}</span> : null}
                         {user.qualifications ? <span>{user.qualifications}</span> : null}
+                        {user.githubConnected && githubHandle ? <span>GitHub: @{githubHandle}</span> : null}
+                        {user.githubConnected && typeof githubFollowers === 'number' ? <span>Followers: {githubFollowers}</span> : null}
+                        {user.githubConnected ? (
+                            <span>
+                                Top Language: {reposLoading ? '...' : topLanguage}
+                            </span>
+                        ) : null}
                     </div>
 
                     <div className="flex flex-wrap gap-4 mt-4 text-sm text-gray-600">
@@ -58,9 +67,20 @@ const ProfileHeader = ({ user, onEdit }) => {
                         )}
                     </div>
 
-                    {user.bio ? (
-                        <p className="mt-4 text-gray-700 leading-relaxed max-w-3xl">{user.bio}</p>
-                    ) : null}
+                    <div className="mt-5 p-4 bg-gray-50 border border-gray-100 rounded-xl max-w-3xl">
+                        <div className="flex items-center justify-between gap-3 mb-2">
+                            <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Profile Description</h3>
+                            <button
+                                onClick={onEdit}
+                                className="text-xs font-medium text-blue-600 hover:text-blue-700 transition-colors"
+                            >
+                                Edit
+                            </button>
+                        </div>
+                        <p className="text-gray-700 leading-relaxed text-sm whitespace-pre-wrap">
+                            {user.bio || 'No description added yet. Click Edit to add your profile description.'}
+                        </p>
+                    </div>
 
                     {/* Verified Skills */}
                     <div className="mt-6">

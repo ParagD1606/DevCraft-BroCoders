@@ -28,6 +28,48 @@ const userSchema = new mongoose.Schema({
         type: String,
         trim: true
     },
+    githubProfileReadme: {
+        content: {
+            type: String,
+            default: ''
+        },
+        renderedHtml: {
+            type: String,
+            default: ''
+        },
+        htmlUrl: {
+            type: String,
+            trim: true
+        },
+        sha: {
+            type: String,
+            trim: true
+        },
+        fetchedAt: {
+            type: Date
+        }
+    },
+    githubSummaryCache: {
+        profile: {
+            type: mongoose.Schema.Types.Mixed,
+            default: {}
+        },
+        stats: {
+            type: mongoose.Schema.Types.Mixed,
+            default: {}
+        },
+        repos: {
+            type: [mongoose.Schema.Types.Mixed],
+            default: []
+        },
+        profileReadme: {
+            type: mongoose.Schema.Types.Mixed,
+            default: null
+        },
+        fetchedAt: {
+            type: Date
+        }
+    },
     googleId: {
         type: String,
         unique: true,

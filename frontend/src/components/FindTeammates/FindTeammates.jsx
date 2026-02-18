@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Search, Loader2 } from 'lucide-react';
 import FilterSidebar from './FilterSidebar';
 import TeammateCard from './TeammateCard';
+import TeammateDetailsModal from './TeammateDetailsModal';
+import ComponentErrorBoundary from '../common/ComponentErrorBoundary';
 import { API_BASE_URL } from '../../config/api';
 
 const FindTeammates = () => {
@@ -14,6 +16,7 @@ const FindTeammates = () => {
     const [teammates, setTeammates] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [selectedTeammate, setSelectedTeammate] = useState(null);
 
     const fetchTeammates = async () => {
         setLoading(true);
@@ -97,7 +100,11 @@ const FindTeammates = () => {
                         <div className="grid md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6">
                             {teammates.length > 0 ? (
                                 teammates.map(user => (
-                                    <TeammateCard key={user._id} user={user} />
+                                    <TeammateCard
+                                        key={user._id || user.id || user.email}
+                                        user={user}
+                                        onViewDetails={setSelectedTeammate}
+                                    />
                                 ))
                             ) : (
                                 <div className="col-span-full text-center py-12 text-gray-500 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
@@ -109,6 +116,33 @@ const FindTeammates = () => {
                     )}
                 </div>
             </div>
+
+            <ComponentErrorBoundary
+                resetKey={selectedTeammate?._id || selectedTeammate?.id || 'none'}
+                fallback={
+                    selectedTeammate ? (
+                        <div className="fixed inset-0 z-50 bg-gray-900/60 p-4 sm:p-6 flex items-center justify-center">
+                            <div className="w-full max-w-xl bg-white rounded-2xl shadow-2xl border border-gray-100 p-6">
+                                <h3 className="text-lg font-bold text-gray-900 mb-2">Unable to open teammate profile</h3>
+                                <p className="text-sm text-gray-600 mb-4">
+                                    Some profile data is invalid. Please close and try another teammate.
+                                </p>
+                                <button
+                                    onClick={() => setSelectedTeammate(null)}
+                                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                                >
+                                    Close
+                                </button>
+                            </div>
+                        </div>
+                    ) : null
+                }
+            >
+                <TeammateDetailsModal
+                    user={selectedTeammate}
+                    onClose={() => setSelectedTeammate(null)}
+                />
+            </ComponentErrorBoundary>
         </div>
     );
 };

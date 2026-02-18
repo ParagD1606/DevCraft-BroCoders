@@ -1,12 +1,23 @@
 import React from 'react';
-import { UserPlus, MapPin, Briefcase, Clock, Star } from 'lucide-react';
+import { UserPlus, MapPin, Briefcase, Clock } from 'lucide-react';
 
-const TeammateCard = ({ user }) => {
+const TeammateCard = ({ user, onViewDetails }) => {
     // Default avatar if none provided
     const avatarUrl = user.avatar || 'https://icon-library.com/images/anonymous-avatar-icon/anonymous-avatar-icon-25.jpg';
 
     return (
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md hover:border-blue-200 transition-all group flex flex-col h-full">
+        <div
+            role="button"
+            tabIndex={0}
+            onClick={() => onViewDetails?.(user)}
+            onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    onViewDetails?.(user);
+                }
+            }}
+            className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md hover:border-blue-200 transition-all group flex flex-col h-full cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
             <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-3">
                     <img
@@ -19,12 +30,6 @@ const TeammateCard = ({ user }) => {
                         <p className="text-sm text-blue-600 font-medium">{user.role || 'Developer'}</p>
                     </div>
                 </div>
-                {/* Match Score removed for now as it's not calculated in backend yet 
-                <div className="flex items-center gap-1 bg-green-50 px-2 py-1 rounded-full text-xs font-bold text-green-700">
-                    <Star size={12} className="fill-current" />
-                    {user.matchScore}%
-                </div>
-                */}
             </div>
 
             <p className="text-sm text-gray-600 mb-4 line-clamp-2 min-h-[40px]">
@@ -66,7 +71,10 @@ const TeammateCard = ({ user }) => {
                         {user.location || 'Remote'}
                     </div>
                     <button
-                        onClick={() => alert(`Connect request sent to ${user.name}!`)}
+                        onClick={(event) => {
+                            event.stopPropagation();
+                            alert(`Connect request sent to ${user.name}!`);
+                        }}
                         className="flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors"
                     >
                         <UserPlus size={16} />
