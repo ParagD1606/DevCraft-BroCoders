@@ -15,14 +15,22 @@ const notificationSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['project_invite', 'project_application'],
+      enum: [
+        'project_invite',
+        'project_application',
+        'connection_request',
+        'connection_response',
+        'connection_project_created',
+      ],
       default: 'project_invite',
       index: true,
     },
     project: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Project',
-      required: true,
+      required() {
+        return ['project_invite', 'project_application'].includes(this.type);
+      },
       index: true,
     },
     inviteRole: {
@@ -83,6 +91,14 @@ notificationSchema.index(
   {
     unique: true,
     partialFilterExpression: { type: 'project_application', status: 'pending' },
+  }
+);
+
+notificationSchema.index(
+  { recipient: 1, sender: 1, type: 1, status: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { type: 'connection_request', status: 'pending' },
   }
 );
 
