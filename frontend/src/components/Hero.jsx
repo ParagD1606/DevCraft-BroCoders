@@ -45,14 +45,14 @@ const Hero = () => {
 
                         <div className="flex flex-col sm:flex-row gap-4 mb-12">
                             <button
-                                onClick={() => navigate('/onboarding')}
+                                onClick={() => navigate('/auth')}
                                 className="group inline-flex items-center justify-center px-8 py-4 text-lg font-semibold text-white bg-gray-900 rounded-2xl hover:bg-gray-800 transition-all transform hover:-translate-y-1 hover:shadow-xl hover:shadow-gray-900/20 active:scale-95"
                             >
                                 Get Started Free
                                 <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
                             </button>
                             <button
-                                onClick={() => navigate('/projects')}
+                                onClick={() => navigate('/auth')}
                                 className="inline-flex items-center justify-center px-8 py-4 text-lg font-semibold text-gray-700 bg-white border border-gray-200 rounded-2xl hover:bg-gray-50 hover:border-gray-300 transition-all hover:-translate-y-1 hover:shadow-lg active:scale-95"
                             >
                                 <Play className="mr-2 w-5 h-5 fill-gray-700" size={20} />
@@ -121,7 +121,7 @@ const Hero = () => {
                                         {[1, 2, 3].map((i) => (
                                             <div key={i} className="group flex items-center gap-4 p-3 rounded-xl bg-white/60 border border-white/60 hover:border-blue-200 hover:bg-white/80 transition-all cursor-default shadow-sm hover:shadow-md">
                                                 <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${i === 1 ? 'bg-indigo-100 text-indigo-600' :
-                                                        i === 2 ? 'bg-purple-100 text-purple-600' : 'bg-pink-100 text-pink-600'
+                                                    i === 2 ? 'bg-purple-100 text-purple-600' : 'bg-pink-100 text-pink-600'
                                                     }`}>
                                                     {['JD', 'AS', 'MR'][i - 1]}
                                                 </div>

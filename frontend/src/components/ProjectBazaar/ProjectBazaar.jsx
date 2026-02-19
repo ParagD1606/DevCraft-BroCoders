@@ -11,6 +11,8 @@ const ProjectBazaar = () => {
     const [search, setSearch] = useState('');
     const [selectedSkill, setSelectedSkill] = useState('all');
 
+    const [selectedCategory, setSelectedCategory] = useState('all');
+
     const fetchBazaar = async () => {
         setLoading(true);
         setError('');
@@ -22,9 +24,6 @@ const ProjectBazaar = () => {
                 },
             });
             const data = await response.json();
-            if (!response.ok) {
-                throw new Error(data.error || 'Failed to fetch Project Bazaar');
-            }
             setItems(Array.isArray(data.items) ? data.items : []);
         } catch (fetchError) {
             setError(fetchError.message || 'Failed to fetch Project Bazaar');
@@ -36,6 +35,15 @@ const ProjectBazaar = () => {
     useEffect(() => {
         fetchBazaar();
     }, []);
+
+    const availableCategories = useMemo(() => {
+        const categories = new Set();
+        items.forEach((item) => {
+            const cat = String(item.projectCategory || 'General').trim();
+            if (cat) categories.add(cat);
+        });
+        return ['all', ...Array.from(categories).sort()];
+    }, [items]);
 
     const availableSkills = useMemo(() => {
         const skills = new Set();
@@ -51,6 +59,13 @@ const ProjectBazaar = () => {
     const filteredItems = useMemo(() => {
         const normalizedSearch = search.trim().toLowerCase();
         return items.filter((item) => {
+            // Category Filter
+            if (selectedCategory !== 'all') {
+                const itemCat = String(item.projectCategory || 'General').toLowerCase();
+                if (itemCat !== selectedCategory.toLowerCase()) return false;
+            }
+
+            // Skill Filter
             if (selectedSkill !== 'all') {
                 const hasSkill = (item.skills || []).some(
                     (skill) => String(skill).trim().toLowerCase() === selectedSkill.toLowerCase()
@@ -73,7 +88,7 @@ const ProjectBazaar = () => {
 
             return corpus.includes(normalizedSearch);
         });
-    }, [items, search, selectedSkill]);
+    }, [items, search, selectedSkill, selectedCategory]);
 
     return (
         <div className="max-w-7xl 2xl:max-w-screen-2xl mx-auto space-y-6">
@@ -101,6 +116,26 @@ const ProjectBazaar = () => {
                     />
                 </div>
 
+                <div className="flex items-center gap-2 overflow-x-auto pb-1 border-b border-gray-50 mb-2">
+                    <span className="text-xs text-gray-500 font-semibold uppercase tracking-wide flex items-center gap-1">
+                        <Briefcase size={12} />
+                        Category
+                    </span>
+                    {availableCategories.map((cat) => (
+                        <button
+                            key={cat}
+                            type="button"
+                            onClick={() => setSelectedCategory(cat)}
+                            className={`px-3 py-1.5 text-xs rounded-full border whitespace-nowrap transition-colors ${selectedCategory === cat
+                                ? 'bg-gray-900 border-gray-900 text-white'
+                                : 'bg-white border-gray-200 text-gray-600 hover:border-gray-400 hover:text-gray-900'
+                                }`}
+                        >
+                            {cat === 'all' ? 'All Categories' : cat === 'saas' ? 'SaaS' : cat === 'ai' ? 'AI / ML' : cat.charAt(0).toUpperCase() + cat.slice(1)}
+                        </button>
+                    ))}
+                </div>
+
                 <div className="flex items-center gap-2 overflow-x-auto pb-1">
                     <span className="text-xs text-gray-500 font-semibold uppercase tracking-wide flex items-center gap-1">
                         <Filter size={12} />
@@ -112,8 +147,8 @@ const ProjectBazaar = () => {
                             type="button"
                             onClick={() => setSelectedSkill(skill)}
                             className={`px-3 py-1.5 text-xs rounded-full border whitespace-nowrap ${selectedSkill === skill
-                                    ? 'bg-blue-600 border-blue-600 text-white'
-                                    : 'bg-white border-gray-200 text-gray-600 hover:border-blue-300 hover:text-blue-700'
+                                ? 'bg-blue-600 border-blue-600 text-white'
+                                : 'bg-white border-gray-200 text-gray-600 hover:border-blue-300 hover:text-blue-700'
                                 }`}
                         >
                             {skill === 'all' ? 'All Skills' : skill}
@@ -139,61 +174,81 @@ const ProjectBazaar = () => {
                     No open roles found for this filter.
                 </div>
             ) : (
-                <div className="grid lg:grid-cols-2 gap-5">
-                    {filteredItems.map((item) => (
-                        <article
-                            key={item.id}
-                            className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 hover:shadow-md transition-shadow"
-                        >
-                            <div className="flex items-start justify-between gap-4 mb-3">
-                                <div>
-                                    <p className="text-xs text-blue-700 font-semibold uppercase tracking-wide mb-1">
-                                        {item.projectCategory || 'General'}
-                                    </p>
-                                    <h3 className="text-lg font-bold text-gray-900">{item.roleTitle}</h3>
-                                    <p className="text-sm text-gray-600 mt-0.5">in {item.projectTitle}</p>
-                                </div>
-                                {Number(item.durationHours) > 0 ? (
-                                    <span className="inline-flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full bg-amber-100 text-amber-800">
-                                        <Clock3 size={12} />
-                                        {item.durationHours}h
-                                    </span>
-                                ) : null}
-                            </div>
-
-                            <p className="text-sm text-gray-600 line-clamp-3 mb-4">
-                                {item.projectDescription}
-                            </p>
-
-                            <div className="flex flex-wrap gap-2 mb-4">
-                                {(item.skills || []).map((skill) => (
-                                    <span
-                                        key={`${item.id}-${skill}`}
-                                        className="px-2 py-1 text-xs font-medium rounded-md bg-gray-50 border border-gray-200 text-gray-700"
+                <div className="space-y-12">
+                    {Object.entries(
+                        filteredItems.reduce((acc, item) => {
+                            const category = item.projectCategory || 'General';
+                            if (!acc[category]) acc[category] = [];
+                            acc[category].push(item);
+                            return acc;
+                        }, {})
+                    ).map(([category, categoryItems]) => (
+                        <div key={category} className="space-y-4">
+                            <h2 className="text-xl font-bold text-gray-800 border-b border-gray-100 pb-2 capitalize">
+                                {category === 'hackathon' ? 'Hackathon Projects' :
+                                    category === 'saas' ? 'SaaS Projects' :
+                                        category === 'ai' ? 'AI / ML Projects' :
+                                            category === 'web3' ? 'Web3 / Blockchain' :
+                                                `${category} Projects`}
+                            </h2>
+                            <div className="grid lg:grid-cols-2 gap-5">
+                                {categoryItems.map((item) => (
+                                    <article
+                                        key={item.id}
+                                        className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 hover:shadow-md transition-shadow"
                                     >
-                                        {skill}
-                                    </span>
+                                        <div className="flex items-start justify-between gap-4 mb-3">
+                                            <div>
+                                                <p className="text-xs text-blue-700 font-semibold uppercase tracking-wide mb-1">
+                                                    {item.projectCategory || 'General'}
+                                                </p>
+                                                <h3 className="text-lg font-bold text-gray-900">{item.roleTitle}</h3>
+                                                <p className="text-sm text-gray-600 mt-0.5">in {item.projectTitle}</p>
+                                            </div>
+                                            {Number(item.durationHours) > 0 ? (
+                                                <span className="inline-flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full bg-amber-100 text-amber-800">
+                                                    <Clock3 size={12} />
+                                                    {item.durationHours}h
+                                                </span>
+                                            ) : null}
+                                        </div>
+
+                                        <p className="text-sm text-gray-600 line-clamp-3 mb-4">
+                                            {item.projectDescription}
+                                        </p>
+
+                                        <div className="flex flex-wrap gap-2 mb-4">
+                                            {(item.skills || []).map((skill, idx) => (
+                                                <span
+                                                    key={`${item.id}-${skill}-${idx}`}
+                                                    className="px-2 py-1 text-xs font-medium rounded-md bg-gray-50 border border-gray-200 text-gray-700"
+                                                >
+                                                    {skill}
+                                                </span>
+                                            ))}
+                                        </div>
+
+                                        <div className="flex items-center justify-between border-t border-gray-100 pt-3">
+                                            <div className="text-xs text-gray-500 space-y-1">
+                                                <p>Posted by {item.owner?.name || 'Project Owner'}</p>
+                                                <p className="inline-flex items-center gap-1">
+                                                    <Users size={12} />
+                                                    {item.spots} spot{item.spots > 1 ? 's' : ''} open
+                                                </p>
+                                            </div>
+
+                                            <button
+                                                type="button"
+                                                onClick={() => navigate(`/project/${item.projectId}`)}
+                                                className="px-3 py-2 text-sm font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                                            >
+                                                View Project
+                                            </button>
+                                        </div>
+                                    </article>
                                 ))}
                             </div>
-
-                            <div className="flex items-center justify-between border-t border-gray-100 pt-3">
-                                <div className="text-xs text-gray-500 space-y-1">
-                                    <p>Posted by {item.owner?.name || 'Project Owner'}</p>
-                                    <p className="inline-flex items-center gap-1">
-                                        <Users size={12} />
-                                        {item.spots} spot{item.spots > 1 ? 's' : ''} open
-                                    </p>
-                                </div>
-
-                                <button
-                                    type="button"
-                                    onClick={() => navigate(`/project/${item.projectId}`)}
-                                    className="px-3 py-2 text-sm font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                                >
-                                    View Project
-                                </button>
-                            </div>
-                        </article>
+                        </div>
                     ))}
                 </div>
             )}

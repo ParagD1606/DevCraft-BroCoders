@@ -1,9 +1,24 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, Users, MoreVertical, ArrowRight } from 'lucide-react';
+import { Calendar, Users, MoreVertical, ArrowRight, Eye, Trash2 } from 'lucide-react';
 
-const ProjectCard = ({ project }) => {
+const ProjectCard = ({ project, onDelete }) => {
     const navigate = useNavigate();
+    const [showMenu, setShowMenu] = useState(false);
+    const menuRef = useRef(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (menuRef.current && !menuRef.current.contains(event.target)) {
+                setShowMenu(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, []);
 
     const getStatusColor = (status) => {
         switch (status) {
@@ -16,14 +31,46 @@ const ProjectCard = ({ project }) => {
     };
 
     return (
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow group">
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow group relative">
             <div className="flex justify-between items-start mb-4">
                 <span className={`px-2 py-1 rounded-md text-xs font-bold ${getStatusColor(project.status)}`}>
                     {project.status}
                 </span>
-                <button className="text-gray-400 hover:text-gray-600">
-                    <MoreVertical size={16} />
-                </button>
+                <div className="relative" ref={menuRef}>
+                    <button
+                        onClick={() => setShowMenu(!showMenu)}
+                        className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-full transition-colors"
+                    >
+                        <MoreVertical size={16} />
+                    </button>
+
+                    {showMenu && (
+                        <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-10 animate-in fade-in zoom-in-95 duration-100">
+                            <button
+                                onClick={() => {
+                                    setShowMenu(false);
+                                    navigate(`/project/${project.id}`);
+                                }}
+                                className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                            >
+                                <Eye size={16} className="text-gray-500" />
+                                View Details
+                            </button>
+                            {project.role === 'Owner' && (
+                                <button
+                                    onClick={() => {
+                                        setShowMenu(false);
+                                        onDelete(project.id);
+                                    }}
+                                    className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 border-t border-gray-50"
+                                >
+                                    <Trash2 size={16} />
+                                    Delete Project
+                                </button>
+                            )}
+                        </div>
+                    )}
+                </div>
             </div>
 
             <h3 className="text-lg font-bold text-gray-900 mb-1">{project.title}</h3>

@@ -26,6 +26,7 @@ const ProjectOverview = ({ formData, updateFormData }) => {
                     >
                         <option value="">Select a category</option>
                         <option value="saas">SaaS</option>
+                        <option value="hackathon">Hackathon</option>
                         <option value="mobile">Mobile App</option>
                         <option value="web3">Web3 / Blockchain</option>
                         <option value="ai">AI / ML</option>

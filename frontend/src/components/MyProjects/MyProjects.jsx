@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Folder, Loader2, Plus } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import ProjectCard from './ProjectCard';
+import ConfirmModal from '../Common/ConfirmModal';
 import { API_BASE_URL } from '../../config/api';
 
 const MyProjects = () => {
@@ -12,6 +13,9 @@ const MyProjects = () => {
     const [projects, setProjects] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+    const [projectToDelete, setProjectToDelete] = useState(null);
+    const [isDeleting, setIsDeleting] = useState(false);
     const searchQuery = (searchParams.get('search') || '').trim().toLowerCase();
 
     const tabs = [
@@ -67,6 +71,39 @@ const MyProjects = () => {
         return searchableContent.includes(searchQuery);
     });
 
+    const handleDeleteProject = (projectId) => {
+        setProjectToDelete(projectId);
+        setDeleteModalOpen(true);
+    };
+
+    const confirmDelete = async () => {
+        if (!projectToDelete) return;
+        setIsDeleting(true);
+        try {
+            const token = localStorage.getItem('authToken');
+            const response = await fetch(`${API_BASE_URL}/api/project/${projectToDelete}`, {
+                method: 'DELETE',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.error || 'Failed to delete project');
+            }
+
+            setProjects(prev => prev.filter(p => p.id !== projectToDelete));
+            setDeleteModalOpen(false);
+            setProjectToDelete(null);
+        } catch (err) {
+            console.error('Delete error:', err);
+            // Silently fail or use a toast notification if available in the future
+        } finally {
+            setIsDeleting(false);
+        }
+    };
+
     return (
         <div className="max-w-7xl 2xl:max-w-screen-2xl mx-auto">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
@@ -118,35 +155,46 @@ const MyProjects = () => {
             ) : (
                 /* Grid */
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6">
-                <AnimatePresence mode="popLayout">
-                    {filteredProjects.map(project => (
-                        <motion.div
-                            key={project.id}
-                            initial={{ opacity: 0, scale: 0.95 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.95 }}
-                            transition={{ duration: 0.2 }}
-                            layout
-                        >
-                            <ProjectCard project={project} />
-                        </motion.div>
-                    ))}
-                </AnimatePresence>
+                    <AnimatePresence mode="popLayout">
+                        {filteredProjects.map(project => (
+                            <motion.div
+                                key={project.id}
+                                initial={{ opacity: 0, scale: 0.95 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.95 }}
+                                transition={{ duration: 0.2 }}
+                                layout
+                            >
+                                <ProjectCard project={project} onDelete={handleDeleteProject} />
+                            </motion.div>
+                        ))}
+                    </AnimatePresence>
 
-                {filteredProjects.length === 0 && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        className="col-span-full py-12 text-center text-gray-500 bg-gray-50 rounded-2xl border border-dashed border-gray-200"
-                    >
-                        <Folder size={48} className="mx-auto mb-4 text-gray-300" />
-                        <p>
-                            {searchQuery ? 'No projects match your search query.' : 'No projects found in this category.'}
-                        </p>
-                    </motion.div>
-                )}
+                    {filteredProjects.length === 0 && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            className="col-span-full py-12 text-center text-gray-500 bg-gray-50 rounded-2xl border border-dashed border-gray-200"
+                        >
+                            <Folder size={48} className="mx-auto mb-4 text-gray-300" />
+                            <p>
+                                {searchQuery ? 'No projects match your search query.' : 'No projects found in this category.'}
+                            </p>
+                        </motion.div>
+                    )}
                 </div>
             )}
+
+            <ConfirmModal
+                isOpen={deleteModalOpen}
+                onClose={() => setDeleteModalOpen(false)}
+                onConfirm={confirmDelete}
+                title="Delete Project?"
+                message="Are you sure you want to delete this project? This action cannot be undone and all team data will be lost."
+                confirmText="Delete Project"
+                variant="danger"
+                isLoading={isDeleting}
+            />
         </div>
     );
 };

@@ -41,9 +41,9 @@ function normalizeRoleInput(role) {
   const skills = Array.isArray(role.skills)
     ? role.skills.map((skill) => String(skill).trim()).filter(Boolean)
     : String(role.skills || '')
-        .split(',')
-        .map((skill) => String(skill).trim())
-        .filter(Boolean);
+      .split(',')
+      .map((skill) => String(skill).trim())
+      .filter(Boolean);
 
   const numericSpots = Number(role.spots);
   const spots = Number.isFinite(numericSpots) ? Math.max(1, Math.round(numericSpots)) : 1;
@@ -1095,6 +1095,31 @@ router.get('/:id', protect, async (req, res) => {
     });
   } catch (error) {
     console.error('Fetch project detail error:', error);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// @desc    Delete a project
+// @route   DELETE /api/project/:id
+// @access  Private
+router.delete('/:id', protect, async (req, res) => {
+  try {
+    const project = await Project.findById(req.params.id);
+
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    // Check if user is project owner
+    if (String(project.owner) !== String(req.user._id)) {
+      return res.status(403).json({ error: 'User not authorized to delete this project' });
+    }
+
+    await project.deleteOne();
+
+    return res.status(200).json({ message: 'Project removed' });
+  } catch (error) {
+    console.error('Delete project error:', error);
     return res.status(500).json({ error: 'Server error' });
   }
 });
