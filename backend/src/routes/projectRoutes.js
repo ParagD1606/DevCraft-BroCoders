@@ -6,7 +6,6 @@ const { protect } = require('../middleware/authMiddleware');
 const { generateVirtualCtoPlan, enhancePlanWithLlm } = require('../utils/virtualCtoUtils');
 const { generateEmbedding, EMBEDDING_DIMENSION } = require('../utils/embeddingUtils');
 const { searchLocalVectors } = require('../utils/vectorUtils');
-const { generateVirtualCtoPlan } = require('../utils/virtualCtoUtils');
 const { ensureProjectGroupChat } = require('../utils/projectChatUtils');
 
 const router = express.Router();
