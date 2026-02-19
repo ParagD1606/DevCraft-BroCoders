@@ -188,4 +188,20 @@ npm run dev
 - Do not commit `.env` secrets.
 
 
+<img width="1919" height="909" alt="Screenshot 2026-02-19 173343" src="https://github.com/user-attachments/assets/c53c97ca-c7aa-49a4-8f93-43ad09051a37" />
+
+
+<img width="1900" height="908" alt="Screenshot 2026-02-19 173610" src="https://github.com/user-attachments/assets/802309c7-d613-4289-8ee7-ac38103ac0a2" />
+
+
+<img width="1901" height="912" alt="Screenshot 2026-02-19 173640" src="https://github.com/user-attachments/assets/879866c3-82ff-45f3-9d7e-75d8e4359708" />
+
+
+<img width="1600" height="766" alt="image" src="https://github.com/user-attachments/assets/134319bf-941c-4c5c-8123-36390f41abd9" />
+
+
+<img width="1899" height="913" alt="Screenshot 2026-02-19 173801" src="https://github.com/user-attachments/assets/01aef4c9-3cb4-4d55-9bc6-37346cb04ed9" />
+
+
+
 <img width="1900" height="910" alt="image" src="https://github.com/user-attachments/assets/ea4ca8de-b65f-41e9-9f3b-6ec435275d79" />
