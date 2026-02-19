@@ -28,6 +28,9 @@ const FindTeammates = () => {
     const [connectError, setConnectError] = useState('');
     const [connectSuccess, setConnectSuccess] = useState('');
     const [connectingUserId, setConnectingUserId] = useState('');
+    const [followError, setFollowError] = useState('');
+    const [followSuccess, setFollowSuccess] = useState('');
+    const [followingUserId, setFollowingUserId] = useState('');
     const [selectedTeammate, setSelectedTeammate] = useState(null);
     const [lastAutoSemanticQuery, setLastAutoSemanticQuery] = useState('');
 
@@ -234,6 +237,65 @@ const FindTeammates = () => {
         }
     }, []);
 
+    const updateFollowDataInList = useCallback((list, userId, isFollowed, followerCount) => {
+        return (Array.isArray(list) ? list : []).map((user) => {
+            const candidateId = String(user?._id || user?.id || '');
+            if (candidateId !== userId) return user;
+            return {
+                ...user,
+                isFollowedByCurrentUser: isFollowed,
+                followerCount,
+                starCount: followerCount,
+            };
+        });
+    }, []);
+
+    const handleToggleFollow = useCallback(async (targetUser) => {
+        const targetUserId = String(targetUser?._id || targetUser?.id || '').trim();
+        if (!targetUserId) return;
+
+        const isFollowing = Boolean(targetUser?.isFollowedByCurrentUser);
+        setFollowError('');
+        setFollowSuccess('');
+        setFollowingUserId(targetUserId);
+        try {
+            const token = localStorage.getItem('authToken');
+            const response = await fetch(`${API_BASE_URL}/api/user/${targetUserId}/follow`, {
+                method: isFollowing ? 'DELETE' : 'POST',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to update follow status');
+            }
+
+            const nextIsFollowed = Boolean(data.isFollowedByCurrentUser);
+            const nextFollowerCount = Number(data.followerCount) || 0;
+
+            setTeammates((prev) => updateFollowDataInList(prev, targetUserId, nextIsFollowed, nextFollowerCount));
+            setSemanticResults((prev) => updateFollowDataInList(prev, targetUserId, nextIsFollowed, nextFollowerCount));
+            setSelectedTeammate((prev) => {
+                if (!prev) return prev;
+                const selectedId = String(prev?._id || prev?.id || '');
+                if (selectedId !== targetUserId) return prev;
+                return {
+                    ...prev,
+                    isFollowedByCurrentUser: nextIsFollowed,
+                    followerCount: nextFollowerCount,
+                    starCount: nextFollowerCount,
+                };
+            });
+            setFollowSuccess(data.message || (nextIsFollowed ? 'User followed' : 'User unfollowed'));
+        } catch (requestError) {
+            setFollowError(requestError.message || 'Failed to update follow status');
+        } finally {
+            setFollowingUserId('');
+        }
+    }, [updateFollowDataInList]);
+
     // Debounce search
     useEffect(() => {
         const normalizedQuery = searchQuery.trim();
@@ -356,6 +418,18 @@ const FindTeammates = () => {
                 </div>
             ) : null}
 
+            {followSuccess ? (
+                <div className="mb-4 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-3 text-sm">
+                    {followSuccess}
+                </div>
+            ) : null}
+
+            {followError ? (
+                <div className="mb-4 bg-red-50 border border-red-200 text-red-700 rounded-xl p-3 text-sm">
+                    {followError}
+                </div>
+            ) : null}
+
             <div className="grid lg:grid-cols-4 xl:grid-cols-5 gap-8">
                 {/* Sidebar */}
                 <div className="lg:col-span-1 xl:col-span-1">
@@ -397,7 +471,7 @@ const FindTeammates = () => {
                             {isSemanticMode ? semanticError : error}
                         </div>
                     ) : (
-                        <div className="grid md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6">
+                        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {displayedTeammates.length > 0 ? (
                                 displayedTeammates.map(user => (
                                     <TeammateCard
@@ -405,8 +479,11 @@ const FindTeammates = () => {
                                         user={user}
                                         onViewDetails={setSelectedTeammate}
                                         onConnect={handleConnect}
+                                        onToggleFollow={handleToggleFollow}
                                         isConnecting={connectingUserId === String(user._id || user.id || '')}
                                         isConnected={Boolean(user.isConnected)}
+                                        isFollowLoading={followingUserId === String(user._id || user.id || '')}
+                                        isFollowed={Boolean(user.isFollowedByCurrentUser)}
                                     />
                                 ))
                             ) : (

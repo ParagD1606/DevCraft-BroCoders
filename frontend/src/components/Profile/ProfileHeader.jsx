@@ -5,6 +5,10 @@ const ProfileHeader = ({ user, onEdit, onEditSkills, topLanguage, reposLoading, 
     const heading = user.role || user.qualifications || 'Member';
     const githubHandle = githubSummary?.profile?.login || user.githubUsername;
     const githubFollowers = githubSummary?.stats?.followers;
+    const followerCount = Number(user.followerCount) || 0;
+    const followingCount = Number(user.followingCount) || 0;
+    const connectedCount = Number(user.connectedCount) || 0;
+    const starCount = Number(user.starCount) || 0;
 
     return (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6">
@@ -50,6 +54,21 @@ const ProfileHeader = ({ user, onEdit, onEditSkills, topLanguage, reposLoading, 
                                 Top Language: {reposLoading ? '...' : topLanguage}
                             </span>
                         ) : null}
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap gap-2">
+                        <span className="px-3 py-1 text-xs font-semibold rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                            Stars: {starCount}
+                        </span>
+                        <span className="px-3 py-1 text-xs font-semibold rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                            Followers: {followerCount}
+                        </span>
+                        <span className="px-3 py-1 text-xs font-semibold rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                            Following: {followingCount}
+                        </span>
+                        <span className="px-3 py-1 text-xs font-semibold rounded-full bg-green-50 text-green-700 border border-green-200">
+                            Connected: {connectedCount}
+                        </span>
                     </div>
 
                     <div className="flex flex-wrap gap-4 mt-4 text-sm text-gray-600">

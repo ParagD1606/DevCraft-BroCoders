@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Briefcase, Loader2, Mail, MapPin } from 'lucide-react';
+import { Briefcase, Loader2, Mail, MapPin, Star, Users } from 'lucide-react';
 import { API_BASE_URL } from '../../config/api';
 
 const TeammateProfile = () => {
@@ -86,6 +86,22 @@ const TeammateProfile = () => {
                                 <Briefcase size={14} />
                                 {profile.experienceLevel || 'Junior'} - {profile.availabilityStatus || 'Part-time'}
                             </p>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                            <span className="px-3 py-1 text-xs font-semibold rounded-full bg-amber-50 text-amber-700 border border-amber-200 inline-flex items-center gap-1">
+                                <Star size={12} className="fill-amber-500 text-amber-500" />
+                                Stars: {Number(profile.starCount) || 0}
+                            </span>
+                            <span className="px-3 py-1 text-xs font-semibold rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                                Followers: {Number(profile.followerCount) || 0}
+                            </span>
+                            <span className="px-3 py-1 text-xs font-semibold rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                Following: {Number(profile.followingCount) || 0}
+                            </span>
+                            <span className="px-3 py-1 text-xs font-semibold rounded-full bg-green-50 text-green-700 border border-green-200 inline-flex items-center gap-1">
+                                <Users size={12} />
+                                Connected: {Number(profile.connectedCount) || 0}
+                            </span>
                         </div>
                     </div>
                 </div>

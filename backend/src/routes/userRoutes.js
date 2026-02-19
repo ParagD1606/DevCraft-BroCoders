@@ -144,6 +144,31 @@ function buildSkillGapSummary(currentUser, projects) {
     };
 }
 
+function toPublicUserPayload(user, currentUserFollowingSet = new Set()) {
+    const normalizedUser = typeof user?.toObject === 'function' ? user.toObject() : (user || {});
+    const normalizedUserId = String(normalizedUser?._id || normalizedUser?.id || '');
+    const followerCount = Array.isArray(normalizedUser?.followers)
+        ? normalizedUser.followers.length
+        : 0;
+    const followingCount = Array.isArray(normalizedUser?.following)
+        ? normalizedUser.following.length
+        : 0;
+    const connectedCount = Array.isArray(normalizedUser?.connections)
+        ? normalizedUser.connections.length
+        : 0;
+    const starCount = followerCount;
+    const { followers, following, connections, ...rest } = normalizedUser;
+
+    return {
+        ...rest,
+        followerCount,
+        followingCount,
+        connectedCount,
+        starCount,
+        isFollowedByCurrentUser: currentUserFollowingSet.has(normalizedUserId),
+    };
+}
+
 function tokenizeSearchText(text) {
     return String(text || '')
         .toLowerCase()
@@ -358,6 +383,9 @@ router.post('/search-semantic', protect, async (req, res) => {
         const connectedUserIds = new Set(
             (Array.isArray(req.user?.connections) ? req.user.connections : []).map((id) => String(id))
         );
+        const followingUserIds = new Set(
+            (Array.isArray(req.user?.following) ? req.user.following : []).map((id) => String(id))
+        );
 
         let normalizedQuery;
         if (queryText) {
@@ -374,7 +402,7 @@ router.post('/search-semantic', protect, async (req, res) => {
         const allCandidates = await User.find({
             _id: { $ne: req.user._id },
         }).select(
-            '+embedding name email age qualifications role bio location website skills interests availability onboardingCompleted experienceLevel availabilityStatus githubId githubUsername githubProfileReadme githubSummaryCache createdAt'
+            '+embedding name email age qualifications role bio location website skills interests availability onboardingCompleted experienceLevel availabilityStatus githubId githubUsername githubProfileReadme githubSummaryCache followers following connections createdAt'
         );
 
         const indexedCandidates = allCandidates.filter(
@@ -383,8 +411,9 @@ router.post('/search-semantic', protect, async (req, res) => {
 
         const rankedUsers = searchLocalVectors(normalizedQuery, indexedCandidates, 10).map((user) => {
             const { githubId, ...rest } = user;
+            const publicUser = toPublicUserPayload(rest, followingUserIds);
             return {
-                ...rest,
+                ...publicUser,
                 githubConnected: Boolean(githubId || user.githubUsername),
                 isConnected: connectedUserIds.has(String(user?._id || user?.id || '')),
                 semanticSource: 'vector',
@@ -412,8 +441,9 @@ router.post('/search-semantic', protect, async (req, res) => {
             .filter((user) => !usedIds.has(String(user?._id || user?.id || '')))
             .map((user) => {
                 const { githubId, ...rest } = user;
+                const publicUser = toPublicUserPayload(rest, followingUserIds);
                 return {
-                    ...rest,
+                    ...publicUser,
                     githubConnected: Boolean(githubId || user.githubUsername),
                     isConnected: connectedUserIds.has(String(user?._id || user?.id || '')),
                 };
@@ -495,6 +525,10 @@ router.put('/profile', protect, async (req, res) => {
                     skills: updatedUser.skills,
                     interests: updatedUser.interests,
                     availability: updatedUser.availability,
+                    followerCount: Array.isArray(updatedUser.followers) ? updatedUser.followers.length : 0,
+                    followingCount: Array.isArray(updatedUser.following) ? updatedUser.following.length : 0,
+                    connectedCount: Array.isArray(updatedUser.connections) ? updatedUser.connections.length : 0,
+                    starCount: Array.isArray(updatedUser.followers) ? updatedUser.followers.length : 0,
                     onboardingCompleted: updatedUser.onboardingCompleted,
                     createdAt: updatedUser.createdAt
                 }
@@ -533,6 +567,10 @@ router.get('/profile', protect, async (req, res) => {
                 skills: user.skills,
                 interests: user.interests,
                 availability: user.availability,
+                followerCount: Array.isArray(user.followers) ? user.followers.length : 0,
+                followingCount: Array.isArray(user.following) ? user.following.length : 0,
+                connectedCount: Array.isArray(user.connections) ? user.connections.length : 0,
+                starCount: Array.isArray(user.followers) ? user.followers.length : 0,
                 onboardingCompleted: user.onboardingCompleted,
                 createdAt: user.createdAt
             });
@@ -557,6 +595,106 @@ router.get('/profile', protect, async (req, res) => {
     }
 });
 
+// @desc    Follow a user
+// @route   POST /api/user/:userId/follow
+// @access  Private
+router.post('/:userId/follow', protect, async (req, res) => {
+    try {
+        const targetUserId = String(req.params.userId || '').trim();
+        const currentUserId = String(req.user._id);
+
+        if (!targetUserId) {
+            return res.status(400).json({ error: 'User id is required' });
+        }
+
+        if (targetUserId === currentUserId) {
+            return res.status(400).json({ error: 'You cannot follow yourself' });
+        }
+
+        const targetUser = await User.findById(targetUserId).select('_id followers following');
+        if (!targetUser) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        await Promise.all([
+            User.updateOne(
+                { _id: req.user._id },
+                { $addToSet: { following: targetUser._id } }
+            ),
+            User.updateOne(
+                { _id: targetUser._id },
+                { $addToSet: { followers: req.user._id } }
+            ),
+        ]);
+
+        const refreshedTarget = await User.findById(targetUser._id).select('_id followers following');
+        return res.status(200).json({
+            message: 'User followed',
+            userId: String(refreshedTarget._id),
+            followerCount: Array.isArray(refreshedTarget.followers) ? refreshedTarget.followers.length : 0,
+            followingCount: Array.isArray(refreshedTarget.following) ? refreshedTarget.following.length : 0,
+            starCount: Array.isArray(refreshedTarget.followers) ? refreshedTarget.followers.length : 0,
+            isFollowedByCurrentUser: true,
+        });
+    } catch (error) {
+        if (error?.name === 'CastError') {
+            return res.status(400).json({ error: 'Invalid user id' });
+        }
+        console.error('Follow user error:', error);
+        return res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// @desc    Unfollow a user
+// @route   DELETE /api/user/:userId/follow
+// @access  Private
+router.delete('/:userId/follow', protect, async (req, res) => {
+    try {
+        const targetUserId = String(req.params.userId || '').trim();
+        const currentUserId = String(req.user._id);
+
+        if (!targetUserId) {
+            return res.status(400).json({ error: 'User id is required' });
+        }
+
+        if (targetUserId === currentUserId) {
+            return res.status(400).json({ error: 'You cannot unfollow yourself' });
+        }
+
+        const targetUser = await User.findById(targetUserId).select('_id followers following');
+        if (!targetUser) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        await Promise.all([
+            User.updateOne(
+                { _id: req.user._id },
+                { $pull: { following: targetUser._id } }
+            ),
+            User.updateOne(
+                { _id: targetUser._id },
+                { $pull: { followers: req.user._id } }
+            ),
+        ]);
+
+        const refreshedTarget = await User.findById(targetUser._id).select('_id followers following');
+        return res.status(200).json({
+            message: 'User unfollowed',
+            userId: String(refreshedTarget._id),
+            followerCount: Array.isArray(refreshedTarget.followers) ? refreshedTarget.followers.length : 0,
+            followingCount: Array.isArray(refreshedTarget.following) ? refreshedTarget.following.length : 0,
+            starCount: Array.isArray(refreshedTarget.followers) ? refreshedTarget.followers.length : 0,
+            isFollowedByCurrentUser: false,
+        });
+    } catch (error) {
+        if (error?.name === 'CastError') {
+            return res.status(400).json({ error: 'Invalid user id' });
+        }
+        console.error('Unfollow user error:', error);
+        return res.status(500).json({ error: 'Server error' });
+    }
+});
+
 // @desc    Get teammate profile by id
 // @route   GET /api/user/:userId/profile
 // @access  Private
@@ -566,6 +704,9 @@ router.get('/:userId/profile', protect, async (req, res) => {
         if (!targetUser) {
             return res.status(404).json({ error: 'User not found' });
         }
+        const followingUserIds = new Set(
+            (Array.isArray(req.user?.following) ? req.user.following : []).map((id) => String(id))
+        );
 
         // Background sync if cache is missing or stale (e.g., > 24h)
         const githubUsername = targetUser.githubUsername;
@@ -600,6 +741,11 @@ router.get('/:userId/profile', protect, async (req, res) => {
             onboardingCompleted: targetUser.onboardingCompleted,
             experienceLevel: targetUser.experienceLevel,
             availabilityStatus: targetUser.availabilityStatus,
+            followerCount: Array.isArray(targetUser.followers) ? targetUser.followers.length : 0,
+            followingCount: Array.isArray(targetUser.following) ? targetUser.following.length : 0,
+            connectedCount: Array.isArray(targetUser.connections) ? targetUser.connections.length : 0,
+            starCount: Array.isArray(targetUser.followers) ? targetUser.followers.length : 0,
+            isFollowedByCurrentUser: followingUserIds.has(String(targetUser._id)),
             createdAt: targetUser.createdAt,
         });
     } catch (error) {
@@ -619,6 +765,9 @@ router.get('/', protect, async (req, res) => {
         const { search, skills, availability, experience } = req.query;
         const connectedUserIds = new Set(
             (Array.isArray(req.user?.connections) ? req.user.connections : []).map((id) => String(id))
+        );
+        const followingUserIds = new Set(
+            (Array.isArray(req.user?.following) ? req.user.following : []).map((id) => String(id))
         );
 
         const query = { _id: { $ne: req.user._id } };
@@ -658,8 +807,9 @@ router.get('/', protect, async (req, res) => {
         const sanitizedUsers = users.map((user) => {
             const plainUser = user.toObject();
             const { githubId, ...rest } = plainUser;
+            const publicUser = toPublicUserPayload(rest, followingUserIds);
             return {
-                ...rest,
+                ...publicUser,
                 githubConnected: Boolean(githubId || plainUser.githubUsername),
                 isConnected: connectedUserIds.has(String(plainUser?._id || plainUser?.id || '')),
             };

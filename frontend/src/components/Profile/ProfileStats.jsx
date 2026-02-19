@@ -1,5 +1,5 @@
 import React from 'react';
-import { BadgeCheck, CalendarClock, Code2, Heart } from 'lucide-react';
+import { BadgeCheck, CalendarClock, Code2, Heart, Star, Users } from 'lucide-react';
 
 const ProfileStats = ({ user }) => {
     const totalAvailabilitySlots = Object.values(user.availability || {}).reduce(
@@ -8,6 +8,16 @@ const ProfileStats = ({ user }) => {
     );
 
     const cards = [
+        {
+            icon: <Star size={16} />,
+            label: 'Stars',
+            value: Number(user.starCount) || 0,
+        },
+        {
+            icon: <Users size={16} />,
+            label: 'Connected',
+            value: Number(user.connectedCount) || 0,
+        },
         {
             icon: <Code2 size={16} />,
             label: 'Skills',
