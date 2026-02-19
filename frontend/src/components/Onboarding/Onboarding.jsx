@@ -1,24 +1,27 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, ChevronRight, Check, Loader2 } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import Step0BasicInfo from './Step0BasicInfo';
 import Step1Skills from './Step1Skills';
 import Step2GitHub from './Step2GitHub';
 import Step3Availability from './Step3Availability';
 import Step4Interests from './Step4Interests';
+import { API_BASE_URL } from '../../config/api';
+
 
 const Onboarding = () => {
-    const navigate = useNavigate();
+    const MotionDiv = motion.div;
     const storedUser = (() => {
         try {
             return JSON.parse(localStorage.getItem('authUser') || '{}');
-        } catch (_error) {
+        } catch {
             return {};
         }
     })();
     const [currentStep, setCurrentStep] = useState(1);
     const [isSubmitting, setIsSubmitting] = useState(false);
+
     const [formData, setFormData] = useState({
         name: storedUser.name || '',
         age: '',
@@ -43,7 +46,8 @@ const Onboarding = () => {
         setIsSubmitting(true);
         try {
             const token = localStorage.getItem('authToken');
-            const response = await fetch('http://localhost:5000/api/user/profile', {
+
+            const response = await fetch(`${API_BASE_URL}/api/user/profile`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -59,6 +63,7 @@ const Onboarding = () => {
                     onboardingCompleted: true
                 })
             });
+
 
             if (response.ok) {
                 const data = await response.json();
@@ -123,7 +128,7 @@ const Onboarding = () => {
                             <span className="text-sm font-medium text-blue-600">{Math.round((currentStep / totalSteps) * 100)}% Complete</span>
                         </div>
                         <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                            <motion.div
+                            <MotionDiv
                                 initial={{ width: 0 }}
                                 animate={{ width: `${(currentStep / totalSteps) * 100}%` }}
                                 transition={{ duration: 0.5 }}
@@ -135,7 +140,7 @@ const Onboarding = () => {
 
                 <div className="p-8">
                     <AnimatePresence mode="wait">
-                        <motion.div
+                        <MotionDiv
                             key={currentStep}
                             initial={{ opacity: 0, x: 20 }}
                             animate={{ opacity: 1, x: 0 }}
@@ -143,7 +148,7 @@ const Onboarding = () => {
                             transition={{ duration: 0.3 }}
                         >
                             {renderStep()}
-                        </motion.div>
+                        </MotionDiv>
                     </AnimatePresence>
                 </div>
 

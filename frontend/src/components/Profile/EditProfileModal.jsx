@@ -5,10 +5,13 @@ import Step2GitHub from '../Onboarding/Step2GitHub';
 import Step3Availability from '../Onboarding/Step3Availability';
 import Step4Interests from '../Onboarding/Step4Interests';
 
+
+
 const EditProfileModal = ({ user, onClose, onSave, initialTab = 'general' }) => {
     const [activeTab, setActiveTab] = useState(initialTab);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
+
     const [formData, setFormData] = useState({
         name: '',
         age: '',
@@ -45,6 +48,7 @@ const EditProfileModal = ({ user, onClose, onSave, initialTab = 'general' }) => 
             setSaving(false);
         }
     };
+
 
     const tabs = [
         { id: 'general', label: 'General', icon: <User size={18} /> },
@@ -186,6 +190,7 @@ const EditProfileModal = ({ user, onClose, onSave, initialTab = 'general' }) => 
                     >
                         {saving ? 'Saving...' : 'Save Changes'}
                     </button>
+
                 </div>
             </div>
         </div>

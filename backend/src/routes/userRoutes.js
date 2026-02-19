@@ -4,259 +4,18 @@ const User = require('../models/User');
 const Project = require('../models/Project');
 const Notification = require('../models/Notification');
 const { protect } = require('../middleware/authMiddleware');
+const { searchLocalVectors } = require('../utils/vectorUtils');
+const { generateEmbedding, buildProfileText } = require('../utils/embeddingUtils');
+const {
+    resolveGitHubUsername,
+    buildGitHubSummaryForUser,
+    getStoredGitHubSummary,
+    fetchGitHubJson,
+    formatGitHubRepo
+} = require('../utils/githubUtils');
 
-async function fetchGitHubJson(path, extraHeaders = {}) {
-    const response = await fetch(`https://api.github.com${path}`, {
-        headers: {
-            'User-Agent': 'DevCraft-BroCoders',
-            'Accept': 'application/vnd.github.v3+json',
-            ...extraHeaders,
-        },
-    });
 
-    const payload = await response.json().catch(() => null);
-    if (!response.ok) {
-        const error = new Error(payload?.message || 'GitHub API request failed');
-        error.statusCode = response.status;
-        throw error;
-    }
-
-    return payload;
-}
-
-async function fetchGitHubText(path, options = {}) {
-    const { method = 'GET', body, accept = 'text/plain', extraHeaders = {} } = options;
-    const response = await fetch(`https://api.github.com${path}`, {
-        method,
-        headers: {
-            'User-Agent': 'DevCraft-BroCoders',
-            Accept: accept,
-            ...(body ? { 'Content-Type': 'application/json' } : {}),
-            ...extraHeaders,
-        },
-        ...(body ? { body: JSON.stringify(body) } : {}),
-    });
-
-    const payload = await response.text();
-    if (!response.ok) {
-        let errorMessage = payload || 'GitHub API request failed';
-        try {
-            const parsedPayload = JSON.parse(payload);
-            errorMessage = parsedPayload?.message || errorMessage;
-        } catch (_error) {
-            // Keep raw text payload as fallback.
-        }
-
-        const error = new Error(errorMessage);
-        error.statusCode = response.status;
-        throw error;
-    }
-
-    return payload;
-}
-
-async function resolveGitHubUsername(user) {
-    if (!user) return null;
-
-    let githubUsername = user.githubUsername;
-
-    // Backward compatibility: resolve and store username for older linked users.
-    if (!githubUsername && user.githubId) {
-        const githubUser = await fetchGitHubJson(`/user/${encodeURIComponent(user.githubId)}`);
-        githubUsername = githubUser?.login;
-        if (githubUsername) {
-            user.githubUsername = githubUsername;
-            await user.save();
-        }
-    }
-
-    return githubUsername;
-}
-
-function formatGitHubRepo(repo) {
-    return {
-        id: repo.id,
-        name: repo.name,
-        full_name: repo.full_name,
-        description: repo.description,
-        html_url: repo.html_url,
-        homepage: repo.homepage,
-        language: repo.language,
-        visibility: repo.visibility,
-        stargazers_count: repo.stargazers_count,
-        forks_count: repo.forks_count,
-        watchers_count: repo.watchers_count,
-        open_issues_count: repo.open_issues_count,
-        topics: Array.isArray(repo.topics) ? repo.topics : [],
-        updated_at: repo.updated_at,
-        pushed_at: repo.pushed_at,
-    };
-}
-
-async function fetchGitHubProfileReadme(githubUsername) {
-    try {
-        const readme = await fetchGitHubJson(
-            `/repos/${encodeURIComponent(githubUsername)}/${encodeURIComponent(githubUsername)}/readme`
-        );
-
-        let content = '';
-        if (readme?.encoding === 'base64' && typeof readme.content === 'string') {
-            content = Buffer.from(readme.content.replace(/\n/g, ''), 'base64').toString('utf8');
-        }
-
-        let renderedHtml = '';
-        const normalizedContent = String(content || '').trim();
-        if (normalizedContent) {
-            try {
-                renderedHtml = await fetchGitHubText('/markdown', {
-                    method: 'POST',
-                    accept: 'application/vnd.github.v3.html',
-                    body: {
-                        text: normalizedContent,
-                        mode: 'gfm',
-                        context: `${githubUsername}/${githubUsername}`,
-                    },
-                });
-            } catch (renderError) {
-                console.warn('Render GitHub README HTML error:', renderError?.message || renderError);
-            }
-        }
-
-        return {
-            content: normalizedContent,
-            renderedHtml: String(renderedHtml || '').trim(),
-            htmlUrl: readme?.html_url || '',
-            sha: readme?.sha || '',
-        };
-    } catch (error) {
-        if (error?.statusCode === 404) {
-            return null;
-        }
-        throw error;
-    }
-}
-
-async function buildGitHubSummaryForUser(user, githubUsername) {
-    const [githubProfile, repos] = await Promise.all([
-        fetchGitHubJson(`/users/${encodeURIComponent(githubUsername)}`),
-        fetchGitHubJson(
-            `/users/${encodeURIComponent(githubUsername)}/repos?sort=updated&per_page=100`,
-            { Accept: 'application/vnd.github+json' }
-        ),
-    ]);
-
-    const normalizedRepos = (Array.isArray(repos) ? repos : []).map(formatGitHubRepo);
-
-    const languageMap = normalizedRepos.reduce((acc, repo) => {
-        if (repo.language) {
-            acc[repo.language] = (acc[repo.language] || 0) + 1;
-        }
-        return acc;
-    }, {});
-
-    const topLanguages = Object.entries(languageMap)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 5)
-        .map(([language, repoCount]) => ({ language, repoCount }));
-
-    const stats = {
-        totalRepos: normalizedRepos.length,
-        publicRepos: githubProfile?.public_repos || 0,
-        followers: githubProfile?.followers || 0,
-        following: githubProfile?.following || 0,
-        totalStars: normalizedRepos.reduce((sum, repo) => sum + (repo.stargazers_count || 0), 0),
-        totalForks: normalizedRepos.reduce((sum, repo) => sum + (repo.forks_count || 0), 0),
-        totalWatchers: normalizedRepos.reduce((sum, repo) => sum + (repo.watchers_count || 0), 0),
-        totalOpenIssues: normalizedRepos.reduce((sum, repo) => sum + (repo.open_issues_count || 0), 0),
-        topLanguage: topLanguages[0]?.language || 'N/A',
-        topLanguages,
-    };
-
-    let profileReadme = user.githubProfileReadme || null;
-    try {
-        const fetchedReadme = await fetchGitHubProfileReadme(githubUsername);
-        const hasReadmeContent = Boolean(fetchedReadme?.content || fetchedReadme?.renderedHtml);
-
-        if (hasReadmeContent) {
-            const hasChanged =
-                (user.githubProfileReadme?.sha || '') !== fetchedReadme.sha ||
-                (user.githubProfileReadme?.content || '') !== fetchedReadme.content ||
-                (user.githubProfileReadme?.renderedHtml || '') !== fetchedReadme.renderedHtml ||
-                (user.githubProfileReadme?.htmlUrl || '') !== fetchedReadme.htmlUrl;
-
-            if (hasChanged || !user.githubProfileReadme?.fetchedAt) {
-                user.githubProfileReadme = {
-                    content: fetchedReadme.content,
-                    renderedHtml: fetchedReadme.renderedHtml,
-                    htmlUrl: fetchedReadme.htmlUrl,
-                    sha: fetchedReadme.sha,
-                    fetchedAt: new Date(),
-                };
-            } else {
-                user.githubProfileReadme.fetchedAt = new Date();
-            }
-
-            profileReadme = user.githubProfileReadme;
-        } else if (user.githubProfileReadme?.content || user.githubProfileReadme?.renderedHtml) {
-            user.githubProfileReadme = undefined;
-            profileReadme = null;
-        }
-    } catch (readmeError) {
-        console.warn('Fetch GitHub profile README error:', readmeError?.message || readmeError);
-    }
-
-    const summary = {
-        profile: {
-            login: githubProfile?.login,
-            name: githubProfile?.name,
-            avatar_url: githubProfile?.avatar_url,
-            bio: githubProfile?.bio,
-            company: githubProfile?.company,
-            blog: githubProfile?.blog,
-            location: githubProfile?.location,
-            twitter_username: githubProfile?.twitter_username,
-            html_url: githubProfile?.html_url,
-            created_at: githubProfile?.created_at,
-            updated_at: githubProfile?.updated_at,
-        },
-        stats,
-        repos: normalizedRepos,
-        profileReadme: profileReadme
-            ? {
-                content: profileReadme.content || '',
-                renderedHtml: profileReadme.renderedHtml || '',
-                htmlUrl: profileReadme.htmlUrl || '',
-                fetchedAt: profileReadme.fetchedAt || null,
-            }
-            : null,
-    };
-
-    user.githubSummaryCache = {
-        profile: summary.profile,
-        stats: summary.stats,
-        repos: summary.repos,
-        profileReadme: summary.profileReadme,
-        fetchedAt: new Date(),
-    };
-    user.markModified('githubSummaryCache');
-    await user.save();
-
-    return summary;
-}
-
-function getStoredGitHubSummary(user) {
-    const cache = user?.githubSummaryCache;
-    if (!cache || !cache.fetchedAt) {
-        return null;
-    }
-
-    return {
-        profile: cache.profile || {},
-        stats: cache.stats || {},
-        repos: Array.isArray(cache.repos) ? cache.repos : [],
-        profileReadme: cache.profileReadme || null,
-    };
-}
+const EMBEDDING_DIMENSION = 768;
 
 function toLowerSet(values = []) {
     return new Set(
@@ -333,8 +92,8 @@ function buildSuggestedMatches(currentUser, users) {
             const highlightedSkills =
                 overlapCount > 0
                     ? candidateSkills.filter((skill) =>
-                          mySkills.has(String(skill || '').trim().toLowerCase())
-                      )
+                        mySkills.has(String(skill || '').trim().toLowerCase())
+                    )
                     : candidateSkills;
 
             return {
@@ -383,6 +142,55 @@ function buildSkillGapSummary(currentUser, projects) {
         impactedProjects,
         missingSkills: uniqueMissingSkills.slice(0, 10),
     };
+}
+
+function tokenizeSearchText(text) {
+    return String(text || '')
+        .toLowerCase()
+        .split(/[^a-z0-9+#.-]+/g)
+        .map((token) => token.trim())
+        .filter(Boolean);
+}
+
+function buildUserSearchDocument(user) {
+    return [
+        user?.name,
+        user?.email,
+        user?.role,
+        user?.bio,
+        ...(Array.isArray(user?.skills) ? user.skills : []),
+        ...(Array.isArray(user?.interests) ? user.interests : []),
+    ]
+        .map((value) => String(value || '').toLowerCase())
+        .join(' ');
+}
+
+function buildKeywordFallbackMatches(queryText, users = [], limit = 10) {
+    const tokens = tokenizeSearchText(queryText);
+    if (tokens.length === 0) return [];
+
+    return (Array.isArray(users) ? users : [])
+        .map((userDoc) => {
+            const user = typeof userDoc?.toObject === 'function' ? userDoc.toObject() : userDoc;
+            const haystack = buildUserSearchDocument(user);
+            const matchCount = tokens.reduce(
+                (count, token) => (haystack.includes(token) ? count + 1 : count),
+                0
+            );
+            const score = tokens.length > 0 ? matchCount / tokens.length : 0;
+            return { user, score };
+        })
+        .filter((entry) => entry.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, Math.max(1, Number(limit) || 10))
+        .map(({ user, score }) => ({
+            ...(() => {
+                const { embedding, ...rest } = user || {};
+                return rest;
+            })(),
+            semanticScore: Number(score.toFixed(6)),
+            semanticSource: 'keyword-fallback',
+        }));
 }
 
 // @desc    Get user's GitHub repositories
@@ -541,6 +349,84 @@ router.get('/dashboard', protect, async (req, res) => {
     }
 });
 
+// @desc    Search teammates using local semantic vector similarity
+// @route   POST /api/user/search-semantic
+// @access  Private
+router.post('/search-semantic', protect, async (req, res) => {
+    try {
+        const { queryText = '', queryVector: providedQueryVector } = req.body || {};
+
+        let normalizedQuery;
+        if (queryText) {
+            // Generate embedding on the backend
+            normalizedQuery = await generateEmbedding(queryText);
+        } else if (Array.isArray(providedQueryVector) && providedQueryVector.length === EMBEDDING_DIMENSION) {
+            // Support legacy queryVector if provided (optional)
+            normalizedQuery = providedQueryVector.map((value) => Number(value));
+        } else {
+            return res.status(400).json({ error: 'Either queryText or a valid queryVector must be provided' });
+        }
+
+
+        const allCandidates = await User.find({
+            _id: { $ne: req.user._id },
+        }).select(
+            '+embedding name email age qualifications role bio location website skills interests availability onboardingCompleted experienceLevel availabilityStatus githubId githubUsername githubProfileReadme githubSummaryCache createdAt'
+        );
+
+        const indexedCandidates = allCandidates.filter(
+            (user) => Array.isArray(user?.embedding) && user.embedding.length === EMBEDDING_DIMENSION
+        );
+
+        const rankedUsers = searchLocalVectors(normalizedQuery, indexedCandidates, 10).map((user) => {
+            const { githubId, ...rest } = user;
+            return {
+                ...rest,
+                githubConnected: Boolean(githubId || user.githubUsername),
+                semanticSource: 'vector',
+            };
+        });
+
+        if (rankedUsers.length >= 10) {
+            return res.status(200).json({
+                results: rankedUsers,
+                meta: {
+                    indexedUsers: indexedCandidates.length,
+                    usedFallback: false,
+                },
+            });
+        }
+
+        const remainingSlots = 10 - rankedUsers.length;
+        const usedIds = new Set(
+            rankedUsers.map((user) => String(user?._id || user?.id || ''))
+        );
+        const nonIndexedCandidates = allCandidates.filter(
+            (user) => !Array.isArray(user?.embedding) || user.embedding.length !== EMBEDDING_DIMENSION
+        );
+        const fallbackCandidates = buildKeywordFallbackMatches(queryText, nonIndexedCandidates, remainingSlots)
+            .filter((user) => !usedIds.has(String(user?._id || user?.id || '')))
+            .map((user) => {
+                const { githubId, ...rest } = user;
+                return {
+                    ...rest,
+                    githubConnected: Boolean(githubId || user.githubUsername),
+                };
+            });
+
+        return res.status(200).json({
+            results: [...rankedUsers, ...fallbackCandidates].slice(0, 10),
+            meta: {
+                indexedUsers: indexedCandidates.length,
+                usedFallback: fallbackCandidates.length > 0,
+            },
+        });
+    } catch (error) {
+        console.error('Semantic teammate search error:', error);
+        return res.status(500).json({ error: 'Server error' });
+    }
+});
+
 // @desc    Update user profile
 // @route   PUT /api/user/profile
 // @access  Private
@@ -560,6 +446,22 @@ router.put('/profile', protect, async (req, res) => {
             if (req.body.skills) user.skills = req.body.skills;
             if (req.body.interests) user.interests = req.body.interests;
             if (req.body.availability) user.availability = req.body.availability;
+
+            // Trigger embedding update if relevant fields changed or if missing
+            const fieldsForEmbedding = ['name', 'role', 'skills', 'bio', 'interests'];
+            const shouldUpdateEmbedding = fieldsForEmbedding.some(field => req.body[field] !== undefined) ||
+                !user.embedding || user.embedding.length !== EMBEDDING_DIMENSION;
+
+            if (shouldUpdateEmbedding) {
+                try {
+                    const profileText = buildProfileText(user);
+                    user.embedding = await generateEmbedding(profileText);
+                } catch (embError) {
+                    console.error('Error auto-updating embedding in profile update:', embError);
+                    // Continue with save even if embedding fails (maybe fallback to keyword later)
+                }
+            }
+
 
             // Mark onboarding as completed if basic info is present
             if (user.name && user.age && user.qualifications) {
@@ -581,7 +483,7 @@ router.put('/profile', protect, async (req, res) => {
                     bio: updatedUser.bio,
                     location: updatedUser.location,
                     website: updatedUser.website,
-                    githubConnected: Boolean(updatedUser.githubId),
+                    githubConnected: Boolean(updatedUser.githubId || updatedUser.githubUsername),
                     githubUsername: updatedUser.githubUsername,
                     githubProfileReadme: updatedUser.githubProfileReadme || null,
                     googleConnected: Boolean(updatedUser.googleId),
@@ -619,7 +521,7 @@ router.get('/profile', protect, async (req, res) => {
                 bio: user.bio,
                 location: user.location,
                 website: user.website,
-                githubConnected: Boolean(user.githubId),
+                githubConnected: Boolean(user.githubId || user.githubUsername),
                 githubUsername: user.githubUsername,
                 githubProfileReadme: user.githubProfileReadme || null,
                 googleConnected: Boolean(user.googleId),
@@ -629,6 +531,18 @@ router.get('/profile', protect, async (req, res) => {
                 onboardingCompleted: user.onboardingCompleted,
                 createdAt: user.createdAt
             });
+
+            // Background sync if cache is missing or stale (e.g., > 24h)
+            const githubUsername = user.githubUsername;
+            if (githubUsername) {
+                const cache = user.githubSummaryCache;
+                const isStale = !cache?.fetchedAt || (Date.now() - new Date(cache.fetchedAt).getTime() > 24 * 60 * 60 * 1000);
+                if (isStale) {
+                    buildGitHubSummaryForUser(user, githubUsername).catch(err => {
+                        console.error('Background profile GitHub sync failed:', err);
+                    });
+                }
+            }
         } else {
             res.status(404).json({ error: 'User not found' });
         }
@@ -646,6 +560,18 @@ router.get('/:userId/profile', protect, async (req, res) => {
         const targetUser = await User.findById(req.params.userId).select('-passwordHash');
         if (!targetUser) {
             return res.status(404).json({ error: 'User not found' });
+        }
+
+        // Background sync if cache is missing or stale (e.g., > 24h)
+        const githubUsername = targetUser.githubUsername;
+        if (githubUsername) {
+            const cache = targetUser.githubSummaryCache;
+            const isStale = !cache?.fetchedAt || (Date.now() - new Date(cache.fetchedAt).getTime() > 24 * 60 * 60 * 1000);
+            if (isStale) {
+                buildGitHubSummaryForUser(targetUser, githubUsername).catch(err => {
+                    console.error('Background teammate GitHub sync failed:', err);
+                });
+            }
         }
 
         return res.json({

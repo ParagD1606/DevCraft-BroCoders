@@ -118,6 +118,11 @@ const userSchema = new mongoose.Schema({
     },
     skills: [String],
     interests: [String],
+    embedding: {
+        type: [Number],
+        default: undefined,
+        select: false
+    },
     availability: {
         type: Map,
         of: [String]

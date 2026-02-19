@@ -185,6 +185,7 @@ const Profile = () => {
                 skills: updatedUser.skills || [],
                 interests: updatedUser.interests || [],
                 availability: updatedUser.availability || {},
+                embedding: Array.isArray(updatedUser.embedding) ? updatedUser.embedding : undefined,
             }),
         });
 

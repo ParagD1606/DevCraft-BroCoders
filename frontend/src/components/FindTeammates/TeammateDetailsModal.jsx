@@ -231,10 +231,10 @@ const TeammateDetailsModal = ({ user, onClose }) => {
         || effectiveGithubSummary?.profile?.login
         || teammateRepos.length
         || safeProfileReadmeHtml
-        || effectiveGithubSummary?.stats
+        || (effectiveGithubSummary?.stats && Object.keys(effectiveGithubSummary.stats).length > 0)
     );
     const hasRenderableGitHubContent = Boolean(
-        effectiveGithubSummary?.stats || teammateRepos.length || safeProfileReadmeHtml
+        (effectiveGithubSummary?.stats && Object.keys(effectiveGithubSummary.stats).length > 0) || teammateRepos.length || safeProfileReadmeHtml
     );
     const topLanguage = effectiveGithubSummary?.stats?.topLanguage
         || Object.entries(
@@ -503,23 +503,23 @@ const TeammateDetailsModal = ({ user, onClose }) => {
                                         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                                             <div className="p-3 rounded-xl bg-gray-50 border border-gray-100">
                                                 <div className="text-xs text-gray-500 mb-1">Public Repos</div>
-                                                <div className="font-bold text-gray-900">{effectiveGithubSummary.stats.publicRepos}</div>
+                                                <div className="font-bold text-gray-900">{effectiveGithubSummary.stats.publicRepos ?? 0}</div>
                                             </div>
                                             <div className="p-3 rounded-xl bg-gray-50 border border-gray-100">
                                                 <div className="text-xs text-gray-500 mb-1">Followers</div>
-                                                <div className="font-bold text-gray-900">{effectiveGithubSummary.stats.followers}</div>
+                                                <div className="font-bold text-gray-900">{effectiveGithubSummary.stats.followers ?? 0}</div>
                                             </div>
                                             <div className="p-3 rounded-xl bg-gray-50 border border-gray-100">
                                                 <div className="text-xs text-gray-500 mb-1">Following</div>
-                                                <div className="font-bold text-gray-900">{effectiveGithubSummary.stats.following}</div>
+                                                <div className="font-bold text-gray-900">{effectiveGithubSummary.stats.following ?? 0}</div>
                                             </div>
                                             <div className="p-3 rounded-xl bg-gray-50 border border-gray-100">
                                                 <div className="text-xs text-gray-500 mb-1">Total Stars</div>
-                                                <div className="font-bold text-gray-900">{effectiveGithubSummary.stats.totalStars}</div>
+                                                <div className="font-bold text-gray-900">{effectiveGithubSummary.stats.totalStars ?? 0}</div>
                                             </div>
                                             <div className="p-3 rounded-xl bg-gray-50 border border-gray-100">
                                                 <div className="text-xs text-gray-500 mb-1">Total Forks</div>
-                                                <div className="font-bold text-gray-900">{effectiveGithubSummary.stats.totalForks}</div>
+                                                <div className="font-bold text-gray-900">{effectiveGithubSummary.stats.totalForks ?? 0}</div>
                                             </div>
                                             <div className="p-3 rounded-xl bg-gray-50 border border-gray-100">
                                                 <div className="text-xs text-gray-500 mb-1">Top Language</div>

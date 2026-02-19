@@ -16,17 +16,33 @@ const protect = async (req, res, next) => {
             // Get token from header
             token = req.headers.authorization.split(' ')[1];
 
-            // Verify token
-            const decoded = jwt.verify(token, getJwtSecret());
-
-            // Get user from the token
-            req.user = await User.findById(decoded.sub).select('-passwordHash');
-
-            if (!req.user) {
-                return res.status(401).json({ error: 'Not authorized, user not found' });
+            // Explicitly handle "null" or "undefined" strings from frontend
+            if (!token || token === 'null' || token === 'undefined') {
+                return res.status(401).json({ error: 'Not authorized, no valid token provided' });
             }
 
-            next();
+
+            // Verify token
+            try {
+                const decoded = jwt.verify(token, getJwtSecret());
+                // Get user from the token
+                req.user = await User.findById(decoded.sub).select('-passwordHash');
+
+                if (!req.user) {
+                    return res.status(401).json({ error: 'Not authorized, user not found' });
+                }
+
+                next();
+            } catch (jwtError) {
+                console.error(`JWT Verification Error: ${jwtError.message}`);
+                console.error(`Received Token: "${token}"`);
+
+                if (jwtError.message === 'jwt malformed') {
+                    return res.status(401).json({ error: 'Not authorized, token is malformed' });
+                }
+                throw jwtError; // Re-throw for outer catch block
+            }
+
         } catch (error) {
             console.error(error);
             return res.status(401).json({ error: 'Not authorized, token failed' });

@@ -54,6 +54,12 @@ const TeammateCard = ({ user, onViewDetails }) => {
             </div>
 
             <div className="mt-auto space-y-3">
+                {typeof user.semanticScore === 'number' ? (
+                    <div className="text-[11px] text-blue-700 bg-blue-50 border border-blue-100 rounded-md px-2 py-1 inline-flex items-center gap-1">
+                        Smart match score: {(user.semanticScore * 100).toFixed(1)}%
+                    </div>
+                ) : null}
+
                 <div className="flex items-center justify-between text-xs text-gray-500">
                     <div className="flex items-center gap-1">
                         <Briefcase size={12} />

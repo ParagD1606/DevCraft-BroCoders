@@ -28,7 +28,7 @@ function serializeAuthUser(user) {
     email: user.email,
     name: user.name,
     onboardingCompleted: user.onboardingCompleted,
-    githubConnected: Boolean(user.githubId),
+    githubConnected: Boolean(user.githubId || user.githubUsername),
     githubUsername: user.githubUsername,
     googleConnected: Boolean(user.googleId),
     createdAt: user.createdAt,
@@ -147,6 +147,9 @@ router.delete('/github/connection', protect, async (req, res) => {
   }
 
   user.githubId = undefined;
+  user.githubUsername = undefined;
+  user.githubProfileReadme = undefined;
+  user.githubSummaryCache = undefined;
   await user.save();
 
   const token = jwt.sign({ sub: user.id, email: user.email }, getJwtSecret(), {
@@ -254,6 +257,12 @@ router.get(
       }
       await user.save();
 
+      // Trigger background sync for GitHub data and embeddings
+      const { buildGitHubSummaryForUser } = require('../utils/githubUtils');
+      buildGitHubSummaryForUser(user, profile.username).catch(err => {
+        console.error('Background GitHub sync failed:', err);
+      });
+
       const token = jwt.sign({ sub: user.id, email: user.email }, getJwtSecret(), {
         expiresIn: process.env.JWT_EXPIRES_IN || '7d',
       });
@@ -286,11 +295,21 @@ router.get(
         githubId: profile.id,
         githubUsername: profile.username,
       });
+      if (!user.name) {
+        user.name = profile.displayName || profile.username;
+        await user.save();
+      }
     } else if (!user.githubId) {
       user.githubId = profile.id;
       user.githubUsername = profile.username;
       await user.save();
     }
+
+    // Trigger background sync for GitHub data and embeddings
+    const { buildGitHubSummaryForUser } = require('../utils/githubUtils');
+    buildGitHubSummaryForUser(user, profile.username).catch(err => {
+      console.error('Background GitHub sync failed (login):', err);
+    });
 
     // Generate Token
     const token = jwt.sign({ sub: user.id, email: user.email }, getJwtSecret(), {
