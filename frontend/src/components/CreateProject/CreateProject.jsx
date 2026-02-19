@@ -19,6 +19,7 @@ const CreateProject = () => {
         description: '',
         category: '',
         roles: [],
+        roadmap: [],
         startDate: '',
         endDate: '',
         commitment: ''
@@ -36,7 +37,8 @@ const CreateProject = () => {
             String(currentFormData?.startDate || '').trim() ||
             String(currentFormData?.endDate || '').trim() ||
             String(currentFormData?.commitment || '').trim() ||
-            (Array.isArray(currentFormData?.roles) && currentFormData.roles.length > 0)
+            (Array.isArray(currentFormData?.roles) && currentFormData.roles.length > 0) ||
+            (Array.isArray(currentFormData?.roadmap) && currentFormData.roadmap.length > 0)
         );
     };
 
@@ -72,6 +74,18 @@ const CreateProject = () => {
             description: String(plan?.description || ''),
             category: String(plan?.category || ''),
             roles: mapBlueprintRolesToForm(plan?.roles || []),
+            roadmap: Array.isArray(plan?.roadmap)
+                ? plan.roadmap.map((phase, index) => ({
+                    phase: String(phase?.phase || `phase_${index + 1}`),
+                    title: String(phase?.title || `Phase ${index + 1}`),
+                    objective: String(phase?.objective || ''),
+                    startWeek: Number(phase?.startWeek) || null,
+                    endWeek: Number(phase?.endWeek) || null,
+                    durationWeeks: Number(phase?.durationWeeks) || null,
+                    deliverables: Array.isArray(phase?.deliverables) ? phase.deliverables : [],
+                    owners: Array.isArray(phase?.owners) ? phase.owners : [],
+                }))
+                : [],
             startDate: String(plan?.startDate || ''),
             endDate: String(plan?.endDate || ''),
             commitment: String(plan?.commitment || ''),
@@ -140,7 +154,7 @@ const CreateProject = () => {
                 let chunk = null;
                 try {
                     chunk = JSON.parse(trimmed);
-                } catch (_error) {
+                } catch {
                     continue;
                 }
 
@@ -206,6 +220,16 @@ const CreateProject = () => {
                             .filter(Boolean),
                         spots: role.spots,
                         durationHours: Number(role.durationHours) > 0 ? Number(role.durationHours) : null,
+                    })),
+                    roadmap: (Array.isArray(formData.roadmap) ? formData.roadmap : []).map((phase, index) => ({
+                        phase: String(phase?.phase || `phase_${index + 1}`),
+                        title: String(phase?.title || `Phase ${index + 1}`),
+                        objective: String(phase?.objective || ''),
+                        startWeek: Number(phase?.startWeek) || null,
+                        endWeek: Number(phase?.endWeek) || null,
+                        durationWeeks: Number(phase?.durationWeeks) || null,
+                        deliverables: Array.isArray(phase?.deliverables) ? phase.deliverables : [],
+                        owners: Array.isArray(phase?.owners) ? phase.owners : [],
                     })),
                 }),
             });

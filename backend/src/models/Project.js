@@ -45,6 +45,50 @@ const projectMemberSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const roadmapPhaseSchema = new mongoose.Schema(
+  {
+    phase: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    title: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    objective: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    startWeek: {
+      type: Number,
+      min: 1,
+      default: null,
+    },
+    endWeek: {
+      type: Number,
+      min: 1,
+      default: null,
+    },
+    durationWeeks: {
+      type: Number,
+      min: 1,
+      default: null,
+    },
+    deliverables: {
+      type: [String],
+      default: [],
+    },
+    owners: {
+      type: [String],
+      default: [],
+    },
+  },
+  { _id: false }
+);
+
 const projectSchema = new mongoose.Schema(
   {
     owner: {
@@ -70,6 +114,10 @@ const projectSchema = new mongoose.Schema(
     },
     roles: {
       type: [projectRoleSchema],
+      default: [],
+    },
+    roadmap: {
+      type: [roadmapPhaseSchema],
       default: [],
     },
     members: {
@@ -104,6 +152,10 @@ const projectSchema = new mongoose.Schema(
       type: Number,
       default: 1,
       min: 1,
+    },
+    latestAnalysis: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
     },
   },
   {

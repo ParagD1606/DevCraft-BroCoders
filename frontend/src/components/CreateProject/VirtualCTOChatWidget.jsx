@@ -14,6 +14,7 @@ import {
     Zap
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { API_BASE_URL } from '../../config/api';
 
 const STARTER_PROMPTS = [
     'A mobile app to help people find gym buddies nearby',
@@ -45,6 +46,42 @@ function toPercent(value) {
     const numeric = Number(value);
     if (!Number.isFinite(numeric)) return null;
     return `${(numeric * 100).toFixed(1)}%`;
+}
+
+function toProjectPayloadFromPlan(plan = {}) {
+    const roles = (Array.isArray(plan?.roles) ? plan.roles : []).map((role) => ({
+        title: String(role?.title || '').trim(),
+        skills: Array.isArray(role?.skills)
+            ? role.skills.map((skill) => String(skill || '').trim()).filter(Boolean)
+            : String(role?.skills || '')
+                .split(',')
+                .map((skill) => skill.trim())
+                .filter(Boolean),
+        spots: Number(role?.spots) > 0 ? Number(role.spots) : 1,
+        durationHours: Number(role?.durationHours) > 0 ? Number(role.durationHours) : null,
+    })).filter((role) => role.title && role.skills.length > 0);
+
+    const roadmap = (Array.isArray(plan?.roadmap) ? plan.roadmap : []).map((phase, index) => ({
+        phase: String(phase?.phase || `phase_${index + 1}`),
+        title: String(phase?.title || `Phase ${index + 1}`),
+        objective: String(phase?.objective || ''),
+        startWeek: Number(phase?.startWeek) > 0 ? Number(phase.startWeek) : null,
+        endWeek: Number(phase?.endWeek) > 0 ? Number(phase.endWeek) : null,
+        durationWeeks: Number(phase?.durationWeeks) > 0 ? Number(phase.durationWeeks) : null,
+        deliverables: Array.isArray(phase?.deliverables) ? phase.deliverables : [],
+        owners: Array.isArray(phase?.owners) ? phase.owners : [],
+    }));
+
+    return {
+        title: String(plan?.title || '').trim(),
+        description: String(plan?.description || '').trim(),
+        category: String(plan?.category || '').trim(),
+        commitment: String(plan?.commitment || '').trim(),
+        startDate: String(plan?.startDate || '').trim() || null,
+        endDate: String(plan?.endDate || '').trim() || null,
+        roles,
+        roadmap,
+    };
 }
 
 const VirtualCTOChatWidget = ({ onArchitectIdea }) => {
@@ -82,6 +119,166 @@ const VirtualCTOChatWidget = ({ onArchitectIdea }) => {
 
     const appendMessage = (message) => {
         setMessages((prev) => [...prev, message]);
+    };
+
+    const updateMessageById = (messageId, updater) => {
+        setMessages((prev) =>
+            prev.map((message) =>
+                message.id === messageId ? updater(message) : message
+            )
+        );
+    };
+
+    const handleCreateProjectFromPlan = async (messageId) => {
+        const targetMessage = messages.find((message) => message.id === messageId);
+        const plan = targetMessage?.plan || null;
+        if (!plan) return;
+
+        const token = localStorage.getItem('authToken');
+        if (!token) {
+            updateMessageById(messageId, (message) => ({
+                ...message,
+                action: {
+                    ...(message.action || {}),
+                    createError: 'Login required to create project.',
+                },
+            }));
+            return;
+        }
+
+        const payload = toProjectPayloadFromPlan(plan);
+        if (!payload.title || !payload.description || !Array.isArray(payload.roles) || payload.roles.length === 0) {
+            updateMessageById(messageId, (message) => ({
+                ...message,
+                action: {
+                    ...(message.action || {}),
+                    createError: 'Plan is incomplete. Generate again with more details.',
+                },
+            }));
+            return;
+        }
+
+        updateMessageById(messageId, (message) => ({
+            ...message,
+            action: {
+                ...(message.action || {}),
+                creatingProject: true,
+                createError: '',
+                createSuccess: '',
+            },
+        }));
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/project`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify(payload),
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to create project from plan');
+            }
+
+            const projectId = String(data?.project?.id || '');
+            updateMessageById(messageId, (message) => ({
+                ...message,
+                action: {
+                    ...(message.action || {}),
+                    creatingProject: false,
+                    createdProjectId: projectId,
+                    createSuccess: 'Project created. You can invite teammates now.',
+                    createError: '',
+                },
+            }));
+        } catch (error) {
+            updateMessageById(messageId, (message) => ({
+                ...message,
+                action: {
+                    ...(message.action || {}),
+                    creatingProject: false,
+                    createError: error?.message || 'Failed to create project',
+                },
+            }));
+        }
+    };
+
+    const handleInviteTeammate = async (messageId, teammate) => {
+        const teammateId = String(teammate?._id || teammate?.id || '').trim();
+        if (!teammateId) return;
+
+        const targetMessage = messages.find((message) => message.id === messageId);
+        const projectId = String(targetMessage?.action?.createdProjectId || '').trim();
+        if (!projectId) return;
+
+        const token = localStorage.getItem('authToken');
+        if (!token) return;
+
+        const inviteRole = String(teammate?.role || 'Contributor').trim() || 'Contributor';
+        updateMessageById(messageId, (message) => ({
+            ...message,
+            action: {
+                ...(message.action || {}),
+                invites: {
+                    ...(message.action?.invites || {}),
+                    [teammateId]: {
+                        loading: true,
+                        error: '',
+                        success: '',
+                    },
+                },
+            },
+        }));
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/project/${projectId}/invite`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    userId: teammateId,
+                    role: inviteRole,
+                }),
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to send invite');
+            }
+
+            updateMessageById(messageId, (message) => ({
+                ...message,
+                action: {
+                    ...(message.action || {}),
+                    invites: {
+                        ...(message.action?.invites || {}),
+                        [teammateId]: {
+                            loading: false,
+                            error: '',
+                            success: 'Invite sent',
+                        },
+                    },
+                },
+            }));
+        } catch (error) {
+            updateMessageById(messageId, (message) => ({
+                ...message,
+                action: {
+                    ...(message.action || {}),
+                    invites: {
+                        ...(message.action?.invites || {}),
+                        [teammateId]: {
+                            loading: false,
+                            error: error?.message || 'Failed to invite',
+                            success: '',
+                        },
+                    },
+                },
+            }));
+        }
     };
 
     const handleSend = async (event) => {
@@ -129,6 +326,13 @@ const VirtualCTOChatWidget = ({ onArchitectIdea }) => {
                 teammateSuggestions,
                 ecosystemInsights,
                 meta,
+                action: {
+                    creatingProject: false,
+                    createdProjectId: '',
+                    createSuccess: '',
+                    createError: '',
+                    invites: {},
+                },
             });
         } catch (error) {
             appendMessage({
@@ -300,6 +504,39 @@ const VirtualCTOChatWidget = ({ onArchitectIdea }) => {
                                                 </div>
                                             ) : null}
 
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                {message.action?.createdProjectId ? (
+                                                    <Link
+                                                        to={`/project/${message.action.createdProjectId}`}
+                                                        className="text-[11px] px-2.5 py-1 rounded-md bg-emerald-600 text-white hover:bg-emerald-700 transition-colors"
+                                                    >
+                                                        View Created Project
+                                                    </Link>
+                                                ) : (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleCreateProjectFromPlan(message.id)}
+                                                        disabled={Boolean(message.action?.creatingProject)}
+                                                        className="text-[11px] px-2.5 py-1 rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                                                    >
+                                                        {message.action?.creatingProject ? 'Creating Project...' : 'Create Project'}
+                                                    </button>
+                                                )}
+                                                <span className="text-[10px] text-slate-500">
+                                                    Create project first to enable teammate invites.
+                                                </span>
+                                            </div>
+                                            {message.action?.createError ? (
+                                                <div className="text-[10px] text-red-700 bg-red-50 border border-red-200 rounded-md px-2 py-1">
+                                                    {message.action.createError}
+                                                </div>
+                                            ) : null}
+                                            {message.action?.createSuccess ? (
+                                                <div className="text-[10px] text-green-700 bg-green-50 border border-green-200 rounded-md px-2 py-1">
+                                                    {message.action.createSuccess}
+                                                </div>
+                                            ) : null}
+
                                             <div className="inline-flex items-center gap-1.5 text-[11px] text-slate-600 bg-white border border-slate-200 rounded-lg px-2 py-1">
                                                 <CalendarDays size={12} className="text-blue-600" />
                                                 {message.plan.startDate} to {message.plan.endDate}
@@ -432,6 +669,8 @@ const VirtualCTOChatWidget = ({ onArchitectIdea }) => {
                                             {message.teammates.slice(0, 4).map((teammate, index) => {
                                                 const teammateId = teammate._id || teammate.id || '';
                                                 const teammateName = teammate.name || teammate.email || 'Teammate';
+                                                const inviteState = message.action?.invites?.[String(teammateId || '')] || {};
+                                                const canInvite = Boolean(message.action?.createdProjectId && teammateId);
                                                 const content = (
                                                     <div className="flex items-center gap-2">
                                                         <span className="w-8 h-8 rounded-full bg-blue-100 border border-blue-200 text-blue-700 text-[10px] font-semibold flex items-center justify-center shrink-0">
@@ -458,25 +697,39 @@ const VirtualCTOChatWidget = ({ onArchitectIdea }) => {
                                                     </div>
                                                 );
 
-                                                if (!teammateId) {
-                                                    return (
-                                                        <div
-                                                            key={`${teammate.email || teammate.name || 'teammate'}-${index}`}
-                                                            className="block rounded-lg border border-slate-200 bg-white px-2 py-1.5"
-                                                        >
-                                                            {content}
-                                                        </div>
-                                                    );
-                                                }
-
                                                 return (
-                                                    <Link
-                                                        key={teammateId}
-                                                        to={`/user/${teammateId}`}
-                                                        className="block rounded-lg border border-slate-200 bg-white px-2 py-1.5 hover:border-blue-300 hover:bg-blue-50/40 transition-colors"
+                                                    <div
+                                                        key={teammateId || `${teammate.email || teammate.name || 'teammate'}-${index}`}
+                                                        className="rounded-lg border border-slate-200 bg-white px-2 py-1.5"
                                                     >
                                                         {content}
-                                                    </Link>
+                                                        <div className="mt-1.5 flex items-center justify-between gap-2">
+                                                            {teammateId ? (
+                                                                <Link
+                                                                    to={`/user/${teammateId}`}
+                                                                    className="text-[10px] text-blue-700 hover:underline"
+                                                                >
+                                                                    View Profile
+                                                                </Link>
+                                                            ) : (
+                                                                <span className="text-[10px] text-slate-500">Profile unavailable</span>
+                                                            )}
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleInviteTeammate(message.id, teammate)}
+                                                                disabled={!canInvite || Boolean(inviteState?.loading)}
+                                                                className="text-[10px] px-2 py-1 rounded-md bg-slate-900 text-white hover:bg-black transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            >
+                                                                {inviteState?.loading ? 'Inviting...' : 'Invite'}
+                                                            </button>
+                                                        </div>
+                                                        {inviteState?.error ? (
+                                                            <div className="mt-1 text-[10px] text-red-700">{inviteState.error}</div>
+                                                        ) : null}
+                                                        {inviteState?.success ? (
+                                                            <div className="mt-1 text-[10px] text-green-700">{inviteState.success}</div>
+                                                        ) : null}
+                                                    </div>
                                                 );
                                             })}
                                         </div>

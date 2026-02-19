@@ -8,9 +8,11 @@ const ProjectBazaar = () => {
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [applyError, setApplyError] = useState('');
+    const [applySuccess, setApplySuccess] = useState('');
+    const [applyingItemId, setApplyingItemId] = useState('');
     const [search, setSearch] = useState('');
     const [selectedSkill, setSelectedSkill] = useState('all');
-
     const [selectedCategory, setSelectedCategory] = useState('all');
 
     const fetchBazaar = async () => {
@@ -35,6 +37,38 @@ const ProjectBazaar = () => {
     useEffect(() => {
         fetchBazaar();
     }, []);
+
+    const handleApply = async (item) => {
+        const projectId = String(item?.projectId || '').trim();
+        const roleTitle = String(item?.roleTitle || '').trim();
+        const itemId = String(item?.id || '').trim();
+        if (!projectId || !roleTitle || !itemId) return;
+
+        setApplyError('');
+        setApplySuccess('');
+        setApplyingItemId(itemId);
+        try {
+            const token = localStorage.getItem('authToken');
+            const response = await fetch(`${API_BASE_URL}/api/project/${projectId}/apply`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({ roleTitle }),
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to submit application');
+            }
+
+            setApplySuccess(`Applied for ${roleTitle}. Project lead has been notified.`);
+        } catch (actionError) {
+            setApplyError(actionError.message || 'Failed to submit application');
+        } finally {
+            setApplyingItemId('');
+        }
+    };
 
     const availableCategories = useMemo(() => {
         const categories = new Set();
@@ -162,6 +196,16 @@ const ProjectBazaar = () => {
                     {error}
                 </div>
             ) : null}
+            {applyError ? (
+                <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 text-sm">
+                    {applyError}
+                </div>
+            ) : null}
+            {applySuccess ? (
+                <div className="bg-green-50 border border-green-200 text-green-700 rounded-xl p-4 text-sm">
+                    {applySuccess}
+                </div>
+            ) : null}
 
             {loading ? (
                 <div className="min-h-[30vh] flex items-center justify-center text-gray-500">
@@ -237,13 +281,27 @@ const ProjectBazaar = () => {
                                                 </p>
                                             </div>
 
-                                            <button
-                                                type="button"
-                                                onClick={() => navigate(`/project/${item.projectId}`)}
-                                                className="px-3 py-2 text-sm font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                                            >
-                                                View Project
-                                            </button>
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleApply(item)}
+                                                    disabled={Number(item.spots) < 1 || applyingItemId === String(item.id)}
+                                                    className="px-3 py-2 text-sm font-semibold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                                                >
+                                                    {Number(item.spots) < 1
+                                                        ? 'Closed'
+                                                        : applyingItemId === String(item.id)
+                                                            ? 'Applying...'
+                                                            : 'Apply'}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => navigate(`/project/${item.projectId}`)}
+                                                    className="px-3 py-2 text-sm font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                                                >
+                                                    View Project
+                                                </button>
+                                            </div>
                                         </div>
                                     </article>
                                 ))}
