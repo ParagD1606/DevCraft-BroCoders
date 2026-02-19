@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Bot, Loader2, Sparkles, UserPlus, Users } from 'lucide-react';
+import TeammateDetailsModal from '../FindTeammates/TeammateDetailsModal';
 
 function toPercent(value) {
   const numeric = Number(value);
@@ -18,6 +19,7 @@ const ProjectAnalysisPanel = ({
   onOpenPositions,
   openingPositions = false,
 }) => {
+  const [selectedCandidate, setSelectedCandidate] = useState(null);
   const roleCandidateMatches = Array.isArray(analysis?.roleCandidateMatches)
     ? analysis.roleCandidateMatches
     : [];
@@ -143,10 +145,37 @@ const ProjectAnalysisPanel = ({
                       {(Array.isArray(entry?.candidates) ? entry.candidates : []).map((candidate) => {
                         const candidateId = String(candidate?.id || '');
                         const inviteState = invitingByUserId?.[candidateId] || {};
+                        const candidateProfile = {
+                          _id: candidateId || undefined,
+                          id: candidateId || undefined,
+                          name: candidate?.name || candidate?.email || 'Candidate',
+                          email: candidate?.email || '',
+                          role: candidate?.role || 'Member',
+                          skills: Array.isArray(candidate?.skills)
+                            ? candidate.skills
+                            : Array.isArray(candidate?.matchedRoleSkills)
+                            ? candidate.matchedRoleSkills
+                            : [],
+                        };
                         return (
                           <div
                             key={candidateId || candidate?.email}
-                            className="min-w-[230px] max-w-[230px] rounded-lg border border-gray-200 bg-gray-50 p-3"
+                            className={`min-w-[230px] max-w-[230px] rounded-lg border border-gray-200 bg-gray-50 p-3 ${
+                              candidateId ? 'cursor-pointer hover:border-blue-300 transition-colors' : ''
+                            }`}
+                            role={candidateId ? 'button' : undefined}
+                            tabIndex={candidateId ? 0 : undefined}
+                            onClick={() => {
+                              if (!candidateId) return;
+                              setSelectedCandidate(candidateProfile);
+                            }}
+                            onKeyDown={(event) => {
+                              if (!candidateId) return;
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault();
+                                setSelectedCandidate(candidateProfile);
+                              }
+                            }}
                           >
                             <p className="text-sm font-semibold text-gray-900 truncate">
                               {candidate?.name || candidate?.email || 'Candidate'}
@@ -161,7 +190,10 @@ const ProjectAnalysisPanel = ({
                             <button
                               type="button"
                               disabled={!isOwner || !candidateId || Boolean(inviteState.loading)}
-                              onClick={() => onInviteUser?.(candidateId, entry?.role?.title || 'Contributor')}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                onInviteUser?.(candidateId, entry?.role?.title || 'Contributor');
+                              }}
                               className="mt-2 w-full inline-flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md bg-slate-900 text-white text-xs hover:bg-black transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               <UserPlus className="w-3.5 h-3.5" />
@@ -200,6 +232,11 @@ const ProjectAnalysisPanel = ({
           ) : null}
         </div>
       ) : null}
+
+      <TeammateDetailsModal
+        user={selectedCandidate}
+        onClose={() => setSelectedCandidate(null)}
+      />
     </div>
   );
 };

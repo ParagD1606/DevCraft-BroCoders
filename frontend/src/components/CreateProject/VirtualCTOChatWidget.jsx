@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { API_BASE_URL } from '../../config/api';
+import TeammateDetailsModal from '../FindTeammates/TeammateDetailsModal';
 
 const STARTER_PROMPTS = [
     'A mobile app to help people find gym buddies nearby',
@@ -96,6 +97,7 @@ const VirtualCTOChatWidget = ({ onArchitectIdea }) => {
             text: 'I am your Virtual CTO. Describe what you want to build, and I will create a full project plan and auto-fill your form.',
         },
     ]);
+    const [selectedTeammate, setSelectedTeammate] = useState(null);
     const scrollRef = useRef(null);
 
     useEffect(() => {
@@ -700,13 +702,37 @@ const VirtualCTOChatWidget = ({ onArchitectIdea }) => {
                                                 return (
                                                     <div
                                                         key={teammateId || `${teammate.email || teammate.name || 'teammate'}-${index}`}
-                                                        className="rounded-lg border border-slate-200 bg-white px-2 py-1.5"
+                                                        className={`rounded-lg border border-slate-200 bg-white px-2 py-1.5 ${
+                                                            teammateId ? 'cursor-pointer hover:border-blue-300 transition-colors' : ''
+                                                        }`}
+                                                        role={teammateId ? 'button' : undefined}
+                                                        tabIndex={teammateId ? 0 : undefined}
+                                                        onClick={() => {
+                                                            if (!teammateId) return;
+                                                            setSelectedTeammate({
+                                                                ...teammate,
+                                                                _id: teammate._id || teammate.id,
+                                                                id: teammate.id || teammate._id,
+                                                            });
+                                                        }}
+                                                        onKeyDown={(event) => {
+                                                            if (!teammateId) return;
+                                                            if (event.key === 'Enter' || event.key === ' ') {
+                                                                event.preventDefault();
+                                                                setSelectedTeammate({
+                                                                    ...teammate,
+                                                                    _id: teammate._id || teammate.id,
+                                                                    id: teammate.id || teammate._id,
+                                                                });
+                                                            }
+                                                        }}
                                                     >
                                                         {content}
                                                         <div className="mt-1.5 flex items-center justify-between gap-2">
                                                             {teammateId ? (
                                                                 <Link
                                                                     to={`/user/${teammateId}`}
+                                                                    onClick={(event) => event.stopPropagation()}
                                                                     className="text-[10px] text-blue-700 hover:underline"
                                                                 >
                                                                     View Profile
@@ -716,7 +742,10 @@ const VirtualCTOChatWidget = ({ onArchitectIdea }) => {
                                                             )}
                                                             <button
                                                                 type="button"
-                                                                onClick={() => handleInviteTeammate(message.id, teammate)}
+                                                                onClick={(event) => {
+                                                                    event.stopPropagation();
+                                                                    handleInviteTeammate(message.id, teammate);
+                                                                }}
                                                                 disabled={!canInvite || Boolean(inviteState?.loading)}
                                                                 className="text-[10px] px-2 py-1 rounded-md bg-slate-900 text-white hover:bg-black transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                                             >
@@ -820,6 +849,10 @@ const VirtualCTOChatWidget = ({ onArchitectIdea }) => {
                     </div>
                 </div>
             )}
+            <TeammateDetailsModal
+                user={selectedTeammate}
+                onClose={() => setSelectedTeammate(null)}
+            />
         </div>
     );
 };
