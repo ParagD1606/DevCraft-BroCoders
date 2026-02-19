@@ -190,6 +190,9 @@ npm run dev
 
 <img width="1919" height="909" alt="Screenshot 2026-02-19 173343" src="https://github.com/user-attachments/assets/c53c97ca-c7aa-49a4-8f93-43ad09051a37" />
 
+<img width="1919" height="909" alt="Screenshot 2026-02-19 173343" src="https://github.com/user-attachments/assets/27f6e6b9-53c4-4b7e-a2c5-2626d2752d5e" />
+
+
 
 <img width="1900" height="908" alt="Screenshot 2026-02-19 173610" src="https://github.com/user-attachments/assets/802309c7-d613-4289-8ee7-ac38103ac0a2" />
 
