@@ -39,7 +39,7 @@ function ScrollToAnchor() {
 
 function LandingPage() {
   return (
-    <div className="min-h-screen bg-white font-sans text-gray-900">
+    <div className="min-h-screen text-slate-900 bg-[radial-gradient(circle_at_top_left,rgba(206,250,254,0.45),transparent_34%),radial-gradient(circle_at_85%_10%,rgba(191,219,254,0.45),transparent_30%),linear-gradient(180deg,#f8fbfc_0%,#ffffff_40%)]">
       <Navbar />
       <main>
         <Hero />

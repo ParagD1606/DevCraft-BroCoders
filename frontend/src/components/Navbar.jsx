@@ -1,7 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { Menu, X } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { Menu, Sparkles, X } from 'lucide-react';
+
+const navItems = [
+  { label: 'Features', hash: '#features' },
+  { label: 'How It Works', hash: '#how-it-works' },
+  { label: 'Roadmaps', hash: '#roadmaps' },
+];
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -9,88 +14,110 @@ const Navbar = () => {
   const location = useLocation();
 
   useEffect(() => {
-    const handleScroll = () => {
-      setScrolled(window.scrollY > 20);
-    };
+    const handleScroll = () => setScrolled(window.scrollY > 16);
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Function to handle scroll to section if on home page, or navigate to home then scroll
-  const handleNavClick = (e, id) => {
+  const onHashClick = (event, hash) => {
     if (location.pathname === '/') {
-      e.preventDefault();
-      const element = document.querySelector(id);
+      event.preventDefault();
+      const element = document.querySelector(hash);
       if (element) {
-        element.scrollIntoView({ behavior: 'smooth' });
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
     }
+    setIsOpen(false);
   };
 
   return (
-    <nav
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? 'bg-white/80 backdrop-blur-md shadow-sm' : 'bg-transparent'
-        }`}
-    >
-      <div className="max-w-7xl 2xl:max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
-        <div className="flex justify-between items-center h-20">
-          <div className="flex-shrink-0 flex items-center">
-            <Link to="/" className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent cursor-pointer">
-              CollabSphere
-            </Link>
+    <header className="fixed inset-x-0 top-0 z-50 px-3 sm:px-4 pt-3">
+      <nav
+        className={`max-w-7xl 2xl:max-w-screen-2xl mx-auto rounded-2xl border transition-all duration-300 ${scrolled
+          ? 'bg-white/95 border-slate-200 shadow-[0_14px_40px_-24px_rgba(15,23,42,0.45)] backdrop-blur-md'
+          : 'bg-white/80 border-white/60 backdrop-blur-sm'
+          }`}
+      >
+        <div className="px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+          <Link to="/" className="inline-flex items-center gap-2.5">
+            <span className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 text-white flex items-center justify-center shadow-sm">
+              <Sparkles size={16} />
+            </span>
+            <span className="text-lg sm:text-xl font-semibold tracking-tight text-slate-900">CollabSphere</span>
+          </Link>
+
+          <div className="hidden md:flex items-center gap-6">
+            {navItems.map((item) => (
+              <a
+                key={item.hash}
+                href={item.hash}
+                onClick={(event) => onHashClick(event, item.hash)}
+                className="text-sm font-medium text-slate-600 hover:text-blue-700 transition-colors"
+              >
+                {item.label}
+              </a>
+            ))}
           </div>
 
-          {/* Desktop Menu */}
-          <div className="hidden md:flex items-center space-x-8">
-            <a href="#features" onClick={(e) => handleNavClick(e, '#features')} className="text-gray-600 hover:text-blue-600 transition-colors">Features</a>
-            <a href="#how-it-works" onClick={(e) => handleNavClick(e, '#how-it-works')} className="text-gray-600 hover:text-blue-600 transition-colors">How It Works</a>
-            <a href="#projects" className="text-gray-600 hover:text-blue-600 transition-colors">Projects</a>
-            <Link to="/auth" className="text-gray-600 hover:text-blue-600 font-medium px-4 py-2 transition-colors">
-              Login
-            </Link>
-            <Link to="/auth" className="bg-blue-600 text-white px-6 py-2 rounded-full hover:bg-blue-700 transition-all transform hover:scale-105 shadow-md hover:shadow-lg">
-              Get Started
-            </Link>
-          </div>
-
-          {/* Mobile Menu Button */}
-          <div className="md:hidden flex items-center">
-            <button
-              onClick={() => setIsOpen(!isOpen)}
-              className="text-gray-600 hover:text-blue-600 focus:outline-none"
+          <div className="hidden md:flex items-center gap-2">
+            <Link
+              to="/auth"
+              className="px-4 py-2 text-sm font-semibold text-slate-700 hover:text-slate-900 transition-colors"
             >
-              {isOpen ? <X size={24} /> : <Menu size={24} />}
-            </button>
+              Sign In
+            </Link>
+            <Link
+              to="/auth"
+              className="px-4 py-2 text-sm font-semibold rounded-xl text-white bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-700 hover:to-cyan-600 transition-colors shadow-sm"
+            >
+              Start Building
+            </Link>
           </div>
-        </div>
-      </div>
 
-      {/* Mobile Menu */}
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            className="md:hidden bg-white/95 backdrop-blur-md border-b border-gray-100 overflow-hidden"
+          <button
+            type="button"
+            onClick={() => setIsOpen((prev) => !prev)}
+            className="md:hidden p-2 rounded-lg text-slate-700 hover:bg-slate-100"
+            aria-label="Toggle menu"
           >
-            <div className="px-4 pt-2 pb-6 space-y-2">
-              <a href="#features" onClick={(e) => { handleNavClick(e, '#features'); setIsOpen(false); }} className="block px-3 py-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-md">Features</a>
-              <a href="#how-it-works" onClick={(e) => { handleNavClick(e, '#how-it-works'); setIsOpen(false); }} className="block px-3 py-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-md">How It Works</a>
-              <a href="#projects" className="block px-3 py-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-md">Projects</a>
-              <div className="pt-4 flex flex-col space-y-3">
-                <Link to="/auth" onClick={() => setIsOpen(false)} className="w-full text-center text-gray-600 hover:text-blue-600 font-medium py-2">
-                  Login
-                </Link>
-                <Link to="/auth" onClick={() => setIsOpen(false)} className="w-full bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 transition-colors shadow-md text-center">
-                  Get Started
-                </Link>
-              </div>
+            {isOpen ? <X size={20} /> : <Menu size={20} />}
+          </button>
+        </div>
+
+        {isOpen ? (
+          <div className="md:hidden px-4 pb-4 border-t border-slate-100">
+            <div className="pt-3 space-y-1">
+              {navItems.map((item) => (
+                <a
+                  key={item.hash}
+                  href={item.hash}
+                  onClick={(event) => onHashClick(event, item.hash)}
+                  className="block px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100"
+                >
+                  {item.label}
+                </a>
+              ))}
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </nav>
+            <div className="grid grid-cols-2 gap-2 pt-3">
+              <Link
+                to="/auth"
+                onClick={() => setIsOpen(false)}
+                className="text-center px-3 py-2 rounded-lg text-sm font-semibold border border-slate-200 text-slate-700"
+              >
+                Sign In
+              </Link>
+              <Link
+                to="/auth"
+                onClick={() => setIsOpen(false)}
+                className="text-center px-3 py-2 rounded-lg text-sm font-semibold text-white bg-gradient-to-r from-blue-600 to-cyan-500"
+              >
+                Start
+              </Link>
+            </div>
+          </div>
+        ) : null}
+      </nav>
+    </header>
   );
 };
 

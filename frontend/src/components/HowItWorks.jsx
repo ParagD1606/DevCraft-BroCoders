@@ -1,92 +1,87 @@
 import React from 'react';
-import { UserPlus, Briefcase, Rocket, ChevronRight } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { ArrowRight, Compass, GitPullRequest, MapPinned } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 const steps = [
-    {
-        icon: <UserPlus className="w-8 h-8 text-white" />,
-        title: 'Create Profile',
-        description: 'Sign up and sync your GitHub to automatically verify your skills and experience.',
-        color: 'from-blue-500 to-blue-600',
-        shadow: 'shadow-blue-500/30',
-        delay: 0,
-    },
-    {
-        icon: <Briefcase className="w-8 h-8 text-white" />,
-        title: 'Get Matched',
-        description: 'Our AI analyzes your profile to find projects that match your expertise perfectly.',
-        color: 'from-indigo-500 to-indigo-600',
-        shadow: 'shadow-indigo-500/30',
-        delay: 0.2,
-    },
-    {
-        icon: <Rocket className="w-8 h-8 text-white" />,
-        title: 'Start Building',
-        description: 'Join a team, collaborate in real-time, and ship amazing products together.',
-        color: 'from-purple-500 to-purple-600',
-        shadow: 'shadow-purple-500/30',
-        delay: 0.4,
-    },
+  {
+    icon: Compass,
+    title: 'Describe your project idea',
+    detail: 'Start with your concept and required outcomes. Virtual CTO scaffolds a practical plan.',
+  },
+  {
+    icon: MapPinned,
+    title: 'Match teammates + shape roadmap',
+    detail: 'Find relevant builders, connect, and collaboratively edit phases with clear ownership.',
+  },
+  {
+    icon: GitPullRequest,
+    title: 'Build and ship in sync',
+    detail: 'Use project chat, role workflows, and source-code links to keep delivery visible.',
+  },
 ];
 
 const HowItWorks = () => {
-    return (
-        <section id="how-it-works" className="py-24 bg-white overflow-hidden">
-            <div className="max-w-7xl 2xl:max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
-                <div className="text-center mb-20">
-                    <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true }}
-                        transition={{ duration: 0.5 }}
-                    >
-                        <h2 className="text-4xl lg:text-5xl font-extrabold text-gray-900 mb-6 tracking-tight">
-                            How CollabSphere Works
-                        </h2>
-                        <p className="text-xl text-gray-600">
-                            Three simple steps to launch your next big project.
-                        </p>
-                    </motion.div>
-                </div>
+  return (
+    <section id="how-it-works" className="py-20 sm:py-24">
+      <div className="max-w-7xl 2xl:max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
+        <div className="text-center max-w-3xl mx-auto animate-rise-in">
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-500 font-semibold">How It Works</p>
+          <h2 className="mt-3 text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-slate-900">
+            From raw idea to organized team execution.
+          </h2>
+          <p className="mt-5 text-base sm:text-lg text-slate-600">
+            Built for hackathon crews, startup teams, and community builders who need speed without chaos.
+          </p>
+        </div>
 
-                <div className="relative grid md:grid-cols-3 gap-12">
-                    {/* Connecting Line (Desktop) */}
-                    <div className="hidden md:block absolute top-16 left-[16%] right-[16%] h-1 bg-gradient-to-r from-blue-100 via-indigo-100 to-purple-100 z-0 rounded-full"></div>
+        <div className="mt-12 relative">
+          <div className="hidden md:block absolute top-10 left-[10%] right-[10%] h-[2px] bg-gradient-to-r from-cyan-200 via-blue-300 to-amber-200 -z-10" />
+          <div className="grid md:grid-cols-3 gap-4 sm:gap-5">
+            {steps.map((step, index) => {
+              const Icon = step.icon;
+              return (
+                <article
+                  key={step.title}
+                  className={`animate-rise-in rounded-3xl border border-slate-200 bg-white p-5 sm:p-6 shadow-sm ${index === 1 ? 'animate-delay-100' : index === 2 ? 'animate-delay-200' : ''
+                    }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="w-11 h-11 rounded-2xl bg-gradient-to-br from-blue-600 to-cyan-500 text-white flex items-center justify-center shadow-sm">
+                      <Icon size={18} />
+                    </span>
+                    <span className="text-xs font-semibold text-slate-500 rounded-full border border-slate-200 px-2 py-1">
+                      Step {index + 1}
+                    </span>
+                  </div>
+                  <h3 className="mt-4 text-xl font-semibold text-slate-900">{step.title}</h3>
+                  <p className="mt-2 text-sm sm:text-base text-slate-600 leading-relaxed">{step.detail}</p>
+                </article>
+              );
+            })}
+          </div>
+        </div>
 
-                    {steps.map((step, index) => (
-                        <motion.div
-                            key={index}
-                            initial={{ opacity: 0, y: 30 }}
-                            whileInView={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.6, delay: step.delay }}
-                            viewport={{ once: true }}
-                            className="relative z-10 flex flex-col items-center text-center group"
-                        >
-                            <div className="relative mb-8">
-                                <div
-                                    className={`w-32 h-32 rounded-3xl bg-gradient-to-br ${step.color} flex items-center justify-center shadow-2xl ${step.shadow} transform group-hover:scale-110 group-hover:rotate-3 transition-all duration-500 ease-out`}
-                                >
-                                    {step.icon}
-                                </div>
-                                <div className={`absolute -inset-4 bg-gradient-to-br ${step.color} opacity-20 blur-xl rounded-full -z-10 group-hover:opacity-30 transition-opacity`}></div>
-
-                                <div className="absolute -bottom-4 -right-4 w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-lg border border-gray-100 font-bold text-gray-400">
-                                    {index + 1}
-                                </div>
-                            </div>
-
-                            <h3 className="text-2xl font-bold text-gray-900 mb-4 group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-blue-600 group-hover:to-purple-600 transition-colors">
-                                {step.title}
-                            </h3>
-                            <p className="text-lg text-gray-600 max-w-xs mx-auto leading-relaxed">
-                                {step.description}
-                            </p>
-                        </motion.div>
-                    ))}
-                </div>
+        <div id="roadmaps" className="mt-10 sm:mt-12 animate-rise-in animate-delay-200">
+          <div className="rounded-3xl border border-cyan-200 bg-gradient-to-r from-cyan-50 via-white to-blue-50 p-6 sm:p-8 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-cyan-700 font-semibold">Roadmaps + Collaboration</p>
+              <h3 className="mt-2 text-2xl sm:text-3xl font-bold text-slate-900">Align teammates around one living execution plan.</h3>
+              <p className="mt-2 text-slate-600 max-w-2xl">
+                Every project gets a shared roadmap and group chat so decisions, ownership, and delivery stay connected.
+              </p>
             </div>
-        </section>
-    );
+            <Link
+              to="/auth"
+              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-blue-700 to-cyan-500 hover:brightness-105 transition w-fit"
+            >
+              Try it now
+              <ArrowRight size={16} />
+            </Link>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
 };
 
 export default HowItWorks;

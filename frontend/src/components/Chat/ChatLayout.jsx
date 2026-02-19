@@ -18,7 +18,16 @@ const ChatLayout = () => {
     const [searchQuery, setSearchQuery] = useState("");
     const [socketConnected, setSocketConnected] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [isMobileViewport, setIsMobileViewport] = useState(false);
     const projectIdFromQuery = searchParams.get('projectId');
+
+    useEffect(() => {
+        const media = window.matchMedia('(max-width: 767px)');
+        const syncViewport = () => setIsMobileViewport(media.matches);
+        syncViewport();
+        media.addEventListener('change', syncViewport);
+        return () => media.removeEventListener('change', syncViewport);
+    }, []);
 
     useEffect(() => {
         const userInfo = JSON.parse(localStorage.getItem("authUser"));
@@ -222,25 +231,32 @@ const ChatLayout = () => {
     };
 
     return (
-        <div className="h-[calc(100vh-8rem)] rounded-3xl overflow-hidden border border-slate-200/80 shadow-[0_18px_60px_-25px_rgba(15,23,42,0.55)] bg-white">
+        <div className="h-[calc(100dvh-8.25rem)] md:h-[calc(100vh-8rem)] rounded-3xl overflow-hidden border border-slate-200/80 shadow-[0_18px_60px_-25px_rgba(15,23,42,0.55)] bg-white">
             <div className="h-full flex bg-gradient-to-br from-slate-900/5 via-white to-cyan-50/40">
-                <ChatSidebar
-                    conversations={chats}
-                    activeId={selectedChat?._id}
-                    onSelect={(chat) => setSelectedChat(chat)}
-                    searchQuery={searchQuery}
-                    setSearchQuery={setSearchQuery}
-                    user={user}
-                    accessChat={accessChat}
-                    isBusy={loading}
-                />
-                <ChatWindow
-                    activeConversation={selectedChat}
-                    currentUser={user}
-                    messages={messages}
-                    onSend={sendMessage}
-                    connectionStatus={socketConnected ? 'connected' : 'connecting'}
-                />
+                <div className={`${selectedChat ? 'hidden md:flex' : 'flex'} flex-1 md:flex-none`}>
+                    <ChatSidebar
+                        conversations={chats}
+                        activeId={selectedChat?._id}
+                        onSelect={(chat) => setSelectedChat(chat)}
+                        searchQuery={searchQuery}
+                        setSearchQuery={setSearchQuery}
+                        user={user}
+                        accessChat={accessChat}
+                        isBusy={loading}
+                    />
+                </div>
+
+                <div className={`${selectedChat ? 'flex' : 'hidden md:flex'} flex-1 min-w-0`}>
+                    <ChatWindow
+                        activeConversation={selectedChat}
+                        currentUser={user}
+                        messages={messages}
+                        onSend={sendMessage}
+                        connectionStatus={socketConnected ? 'connected' : 'connecting'}
+                        onBack={() => setSelectedChat(null)}
+                        showMobileBack={isMobileViewport}
+                    />
+                </div>
             </div>
         </div>
     );
