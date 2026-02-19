@@ -1,6 +1,7 @@
 const express = require('express');
 const Notification = require('../models/Notification');
 const Project = require('../models/Project');
+const User = require('../models/User');
 const { protect } = require('../middleware/authMiddleware');
 
 const router = express.Router();
@@ -18,6 +19,8 @@ function toNotificationResponse(notification) {
         ? 'invite'
         : notification.type === 'project_application'
         ? 'application'
+        : notification.type === 'connection_request'
+        ? 'invite'
         : 'alert',
     rawType: notification.type,
     title: notification.title || 'Notification',
@@ -39,6 +42,123 @@ function toNotificationResponse(notification) {
     updatedAt: notification.updatedAt,
   };
 }
+
+async function createConnectionOutcomeNotification({
+  requestNotification,
+  actorUser,
+  status,
+}) {
+  const actorName = actorUser?.name || actorUser?.email || 'A user';
+  const wasAccepted = status === 'accepted';
+
+  await Notification.create({
+    recipient: requestNotification.sender,
+    sender: actorUser._id,
+    type: 'connection_response',
+    title: wasAccepted
+      ? 'Connection Request Accepted'
+      : 'Connection Request Declined',
+    message: wasAccepted
+      ? `${actorName} accepted your connection request.`
+      : `${actorName} declined your connection request.`,
+    status: wasAccepted ? 'accepted' : 'rejected',
+    isRead: false,
+  });
+}
+
+// @desc    Send teammate connection request notification
+// @route   POST /api/notification/connection-request
+// @access  Private
+router.post('/connection-request', protect, async (req, res) => {
+  try {
+    const recipientId = String(req.body?.recipientId || '').trim();
+    if (!recipientId) {
+      return res.status(400).json({ error: 'Recipient id is required' });
+    }
+
+    if (String(recipientId) === String(req.user._id)) {
+      return res
+        .status(400)
+        .json({ error: 'You cannot send a connection request to yourself' });
+    }
+
+    const isAlreadyConnected =
+      Array.isArray(req.user?.connections) &&
+      req.user.connections.some((id) => String(id) === recipientId);
+    if (isAlreadyConnected) {
+      return res.status(409).json({ error: 'You are already connected with this user' });
+    }
+
+    const recipientUser = await User.findById(recipientId).select('name email connections');
+    if (!recipientUser) {
+      return res.status(404).json({ error: 'Recipient user not found' });
+    }
+
+    const recipientConnections = Array.isArray(recipientUser?.connections)
+      ? recipientUser.connections
+      : [];
+    if (recipientConnections.some((id) => String(id) === String(req.user._id))) {
+      return res.status(409).json({ error: 'You are already connected with this user' });
+    }
+
+    const existingPendingRequest = await Notification.findOne({
+      recipient: recipientId,
+      sender: req.user._id,
+      type: 'connection_request',
+      status: 'pending',
+    });
+
+    if (existingPendingRequest) {
+      return res
+        .status(409)
+        .json({ error: 'You already sent a pending connection request to this user' });
+    }
+
+    const incomingPendingRequest = await Notification.findOne({
+      recipient: req.user._id,
+      sender: recipientId,
+      type: 'connection_request',
+      status: 'pending',
+    });
+
+    if (incomingPendingRequest) {
+      return res.status(409).json({
+        error:
+          'This user has already sent you a connection request. Check your notifications.',
+      });
+    }
+
+    const senderName = req.user.name || req.user.email || 'Someone';
+    const createdNotification = await Notification.create({
+      recipient: recipientId,
+      sender: req.user._id,
+      type: 'connection_request',
+      title: 'New Connection Request',
+      message: `${senderName} wants to connect with you.`,
+      status: 'pending',
+      isRead: false,
+    });
+
+    await createdNotification.populate('sender', 'name email');
+    await createdNotification.populate('project', 'title');
+
+    return res.status(201).json({
+      message: 'Connection request sent',
+      notification: toNotificationResponse(createdNotification),
+    });
+  } catch (error) {
+    if (error?.name === 'CastError') {
+      return res.status(400).json({ error: 'Invalid recipient id' });
+    }
+    if (error?.code === 11000) {
+      return res
+        .status(409)
+        .json({ error: 'You already sent a pending connection request to this user' });
+    }
+    console.error('Send connection request error:', error);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
 
 // @desc    Fetch current user's notifications
 // @route   GET /api/notification
@@ -111,7 +231,7 @@ router.patch('/:id/read', protect, async (req, res) => {
   }
 });
 
-// @desc    Accept a project invite/application notification
+// @desc    Accept an actionable notification
 // @route   POST /api/notification/:id/accept
 // @access  Private
 router.post('/:id/accept', protect, async (req, res) => {
@@ -125,7 +245,11 @@ router.post('/:id/accept', protect, async (req, res) => {
       return res.status(404).json({ error: 'Notification not found' });
     }
 
-    if (!['project_invite', 'project_application'].includes(notification.type)) {
+    if (
+      !['project_invite', 'project_application', 'connection_request'].includes(
+        notification.type
+      )
+    ) {
       return res.status(400).json({ error: 'This notification cannot be accepted' });
     }
 
@@ -133,9 +257,13 @@ router.post('/:id/accept', protect, async (req, res) => {
       return res.status(400).json({ error: `Invite is already ${notification.status}` });
     }
 
-    const project = await Project.findById(notification.project);
-    if (!project) {
-      return res.status(404).json({ error: 'Project not found' });
+    let project = null;
+
+    if (notification.type === 'project_invite' || notification.type === 'project_application') {
+      project = await Project.findById(notification.project);
+      if (!project) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
     }
 
     if (notification.type === 'project_invite') {
@@ -207,6 +335,30 @@ router.post('/:id/accept', protect, async (req, res) => {
       });
     }
 
+    if (notification.type === 'connection_request') {
+      const senderUser = await User.findById(notification.sender).select('_id');
+      if (!senderUser) {
+        return res.status(404).json({ error: 'Sender user not found' });
+      }
+
+      await Promise.all([
+        User.updateOne(
+          { _id: req.user._id },
+          { $addToSet: { connections: senderUser._id } }
+        ),
+        User.updateOne(
+          { _id: senderUser._id },
+          { $addToSet: { connections: req.user._id } }
+        ),
+      ]);
+
+      await createConnectionOutcomeNotification({
+        requestNotification: notification,
+        actorUser: req.user,
+        status: 'accepted',
+      });
+    }
+
     const now = new Date();
     notification.status = 'accepted';
     notification.isRead = true;
@@ -220,8 +372,10 @@ router.post('/:id/accept', protect, async (req, res) => {
       message:
         notification.type === 'project_application'
           ? 'Application accepted successfully'
+          : notification.type === 'connection_request'
+          ? 'Connection request accepted'
           : 'Invite accepted successfully',
-      projectId: String(project._id),
+      projectId: project ? String(project._id) : '',
       notification: toNotificationResponse(notification),
     });
   } catch (error) {
@@ -230,7 +384,7 @@ router.post('/:id/accept', protect, async (req, res) => {
   }
 });
 
-// @desc    Reject a project invite/application notification
+// @desc    Reject an actionable notification
 // @route   POST /api/notification/:id/reject
 // @access  Private
 router.post('/:id/reject', protect, async (req, res) => {
@@ -244,7 +398,11 @@ router.post('/:id/reject', protect, async (req, res) => {
       return res.status(404).json({ error: 'Notification not found' });
     }
 
-    if (!['project_invite', 'project_application'].includes(notification.type)) {
+    if (
+      !['project_invite', 'project_application', 'connection_request'].includes(
+        notification.type
+      )
+    ) {
       return res.status(400).json({ error: 'This notification cannot be rejected' });
     }
 
@@ -258,6 +416,15 @@ router.post('/:id/reject', protect, async (req, res) => {
     notification.readAt = now;
     notification.actedAt = now;
     await notification.save();
+
+    if (notification.type === 'connection_request') {
+      await createConnectionOutcomeNotification({
+        requestNotification: notification,
+        actorUser: req.user,
+        status: 'rejected',
+      });
+    }
+
     await notification.populate('sender', 'name email');
     await notification.populate('project', 'title');
 
@@ -265,6 +432,8 @@ router.post('/:id/reject', protect, async (req, res) => {
       message:
         notification.type === 'project_application'
           ? 'Application rejected'
+          : notification.type === 'connection_request'
+          ? 'Connection request rejected'
           : 'Invite rejected',
       notification: toNotificationResponse(notification),
     });

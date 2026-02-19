@@ -248,6 +248,35 @@ function toBazaarFeedItems(projects, query = {}) {
     .sort((a, b) => new Date(b.postedAt).getTime() - new Date(a.postedAt).getTime());
 }
 
+async function notifyConnectionsAboutNewProject({ ownerId, ownerName, project }) {
+  const owner = await User.findById(ownerId).select('connections');
+  const rawConnections = Array.isArray(owner?.connections) ? owner.connections : [];
+  const connectionIds = rawConnections
+    .map((id) => String(id))
+    .filter(Boolean)
+    .filter((id) => id !== String(ownerId));
+
+  if (connectionIds.length === 0) return 0;
+
+  const existingUsers = await User.find({ _id: { $in: connectionIds } }).select('_id');
+  const recipientIds = existingUsers.map((user) => user._id);
+
+  if (recipientIds.length === 0) return 0;
+
+  const notifications = recipientIds.map((recipientId) => ({
+    recipient: recipientId,
+    sender: ownerId,
+    type: 'connection_project_created',
+    project: project._id,
+    title: 'New Project by Your Connection',
+    message: `${ownerName} created a new project: "${project.title}".`,
+    isRead: false,
+  }));
+
+  await Notification.insertMany(notifications, { ordered: false });
+  return notifications.length;
+}
+
 // @desc    Create a new project
 // @route   POST /api/project
 // @access  Private
@@ -285,6 +314,17 @@ router.post('/', protect, async (req, res) => {
       progress: 0,
       teamSize: 1,
     });
+
+    const ownerName = req.user.name || req.user.email || 'Someone';
+    try {
+      await notifyConnectionsAboutNewProject({
+        ownerId: req.user._id,
+        ownerName,
+        project,
+      });
+    } catch (notifyError) {
+      console.error('Project connection notification error:', notifyError);
+    }
 
     return res.status(201).json({
       message: 'Project created successfully',

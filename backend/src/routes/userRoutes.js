@@ -355,6 +355,9 @@ router.get('/dashboard', protect, async (req, res) => {
 router.post('/search-semantic', protect, async (req, res) => {
     try {
         const { queryText = '', queryVector: providedQueryVector } = req.body || {};
+        const connectedUserIds = new Set(
+            (Array.isArray(req.user?.connections) ? req.user.connections : []).map((id) => String(id))
+        );
 
         let normalizedQuery;
         if (queryText) {
@@ -383,6 +386,7 @@ router.post('/search-semantic', protect, async (req, res) => {
             return {
                 ...rest,
                 githubConnected: Boolean(githubId || user.githubUsername),
+                isConnected: connectedUserIds.has(String(user?._id || user?.id || '')),
                 semanticSource: 'vector',
             };
         });
@@ -411,6 +415,7 @@ router.post('/search-semantic', protect, async (req, res) => {
                 return {
                     ...rest,
                     githubConnected: Boolean(githubId || user.githubUsername),
+                    isConnected: connectedUserIds.has(String(user?._id || user?.id || '')),
                 };
             });
 
@@ -612,6 +617,9 @@ router.get('/:userId/profile', protect, async (req, res) => {
 router.get('/', protect, async (req, res) => {
     try {
         const { search, skills, availability, experience } = req.query;
+        const connectedUserIds = new Set(
+            (Array.isArray(req.user?.connections) ? req.user.connections : []).map((id) => String(id))
+        );
 
         const query = { _id: { $ne: req.user._id } };
 
@@ -653,6 +661,7 @@ router.get('/', protect, async (req, res) => {
             return {
                 ...rest,
                 githubConnected: Boolean(githubId || plainUser.githubUsername),
+                isConnected: connectedUserIds.has(String(plainUser?._id || plainUser?.id || '')),
             };
         });
         res.json(sanitizedUsers);

@@ -25,6 +25,9 @@ const FindTeammates = () => {
     const [semanticLoading, setSemanticLoading] = useState(false);
     const [error, setError] = useState('');
     const [semanticError, setSemanticError] = useState('');
+    const [connectError, setConnectError] = useState('');
+    const [connectSuccess, setConnectSuccess] = useState('');
+    const [connectingUserId, setConnectingUserId] = useState('');
     const [selectedTeammate, setSelectedTeammate] = useState(null);
     const [lastAutoSemanticQuery, setLastAutoSemanticQuery] = useState('');
 
@@ -196,6 +199,41 @@ const FindTeammates = () => {
         setIsSemanticMode(false);
     };
 
+    const handleConnect = useCallback(async (targetUser) => {
+        if (targetUser?.isConnected) {
+            return;
+        }
+
+        const recipientId = String(targetUser?._id || targetUser?.id || '').trim();
+        if (!recipientId) return;
+
+        setConnectError('');
+        setConnectSuccess('');
+        setConnectingUserId(recipientId);
+        try {
+            const token = localStorage.getItem('authToken');
+            const response = await fetch(`${API_BASE_URL}/api/notification/connection-request`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({ recipientId }),
+            });
+
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to send connection request');
+            }
+
+            setConnectSuccess(data.message || `Connection request sent to ${targetUser?.name || 'user'}.`);
+        } catch (requestError) {
+            setConnectError(requestError.message || 'Failed to send connection request');
+        } finally {
+            setConnectingUserId('');
+        }
+    }, []);
+
     // Debounce search
     useEffect(() => {
         const normalizedQuery = searchQuery.trim();
@@ -306,6 +344,18 @@ const FindTeammates = () => {
                 ) : null}
             </section>
 
+            {connectSuccess ? (
+                <div className="mb-4 bg-green-50 border border-green-200 text-green-700 rounded-xl p-3 text-sm">
+                    {connectSuccess}
+                </div>
+            ) : null}
+
+            {connectError ? (
+                <div className="mb-4 bg-red-50 border border-red-200 text-red-700 rounded-xl p-3 text-sm">
+                    {connectError}
+                </div>
+            ) : null}
+
             <div className="grid lg:grid-cols-4 xl:grid-cols-5 gap-8">
                 {/* Sidebar */}
                 <div className="lg:col-span-1 xl:col-span-1">
@@ -354,6 +404,9 @@ const FindTeammates = () => {
                                         key={user._id || user.id || user.email}
                                         user={user}
                                         onViewDetails={setSelectedTeammate}
+                                        onConnect={handleConnect}
+                                        isConnecting={connectingUserId === String(user._id || user.id || '')}
+                                        isConnected={Boolean(user.isConnected)}
                                     />
                                 ))
                             ) : (

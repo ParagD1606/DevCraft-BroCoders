@@ -1,7 +1,13 @@
 import React from 'react';
 import { UserPlus, MapPin, Briefcase, Clock } from 'lucide-react';
 
-const TeammateCard = ({ user, onViewDetails }) => {
+const TeammateCard = ({
+    user,
+    onViewDetails,
+    onConnect,
+    isConnecting = false,
+    isConnected = false,
+}) => {
     // Default avatar if none provided
     const avatarUrl = user.avatar || 'https://icon-library.com/images/anonymous-avatar-icon/anonymous-avatar-icon-25.jpg';
 
@@ -76,16 +82,27 @@ const TeammateCard = ({ user, onViewDetails }) => {
                         <MapPin size={12} />
                         {user.location || 'Remote'}
                     </div>
-                    <button
-                        onClick={(event) => {
-                            event.stopPropagation();
-                            alert(`Connect request sent to ${user.name}!`);
-                        }}
-                        className="flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors"
-                    >
-                        <UserPlus size={16} />
-                        Connect
-                    </button>
+                    {isConnected ? (
+                        <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-green-50 text-green-700 border border-green-200">
+                            Connected
+                        </span>
+                    ) : (
+                        <button
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                onConnect?.(user);
+                            }}
+                            disabled={isConnecting}
+                            className={`flex items-center gap-1 text-sm font-medium transition-colors ${
+                                isConnecting
+                                    ? 'text-blue-400 cursor-not-allowed'
+                                    : 'text-blue-600 hover:text-blue-700'
+                            }`}
+                        >
+                            <UserPlus size={16} />
+                            {isConnecting ? 'Sending...' : 'Connect'}
+                        </button>
+                    )}
                 </div>
             </div>
         </div>

@@ -193,11 +193,14 @@ const NotificationsPage = () => {
                     ) : filteredNotifications.length > 0 ? (
                         filteredNotifications.map(notification => {
                             const canActOnNotification =
-                                ['project_invite', 'project_application'].includes(notification.rawType) &&
+                                ['project_invite', 'project_application', 'connection_request'].includes(notification.rawType) &&
                                 notification.status === 'pending';
 
                             const actions = [];
-                            if (notification.rawType === 'project_application' && notification.sender?.id) {
+                            if (
+                                ['project_application', 'connection_request'].includes(notification.rawType) &&
+                                notification.sender?.id
+                            ) {
                                 actions.push({
                                     label: 'View Profile',
                                     variant: 'secondary',
