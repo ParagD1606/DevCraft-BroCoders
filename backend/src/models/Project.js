@@ -112,6 +112,11 @@ const projectSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    sourceCodeUrl: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     roles: {
       type: [projectRoleSchema],
       default: [],

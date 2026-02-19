@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, Users, MoreVertical, ArrowRight, Eye, Trash2, Route } from 'lucide-react';
+import { Calendar, Users, MoreVertical, ArrowRight, Eye, Trash2, Route, ExternalLink } from 'lucide-react';
 
 const ProjectCard = ({ project, onDelete }) => {
     const navigate = useNavigate();
@@ -110,13 +110,26 @@ const ProjectCard = ({ project, onDelete }) => {
                 <span className="text-xs font-medium text-gray-500">
                     My Role: <span className="text-blue-600">{project.role}</span>
                 </span>
-                <button
-                    onClick={() => navigate(`/project/${project.id}`)}
-                    className="flex items-center gap-1 text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors"
-                >
-                    View Details
-                    <ArrowRight size={16} />
-                </button>
+                <div className="flex items-center gap-3">
+                    {project.sourceCodeUrl ? (
+                        <a
+                            href={project.sourceCodeUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 text-sm font-medium text-blue-700 hover:text-blue-800 transition-colors"
+                        >
+                            Source
+                            <ExternalLink size={14} />
+                        </a>
+                    ) : null}
+                    <button
+                        onClick={() => navigate(`/project/${project.id}`)}
+                        className="flex items-center gap-1 text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors"
+                    >
+                        View Details
+                        <ArrowRight size={16} />
+                    </button>
+                </div>
             </div>
         </div>
     );

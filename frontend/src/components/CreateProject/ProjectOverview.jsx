@@ -45,6 +45,20 @@ const ProjectOverview = ({ formData, updateFormData }) => {
                         className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all resize-none"
                     />
                 </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Source Code URL</label>
+                    <input
+                        type="url"
+                        value={formData.sourceCodeUrl || ''}
+                        onChange={(e) => updateFormData('sourceCodeUrl', e.target.value)}
+                        placeholder="https://github.com/username/repository"
+                        className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                        Optional. Add your GitHub/GitLab/Bitbucket repo link.
+                    </p>
+                </div>
             </div>
         </div>
     );

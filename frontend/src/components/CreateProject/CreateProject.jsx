@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { motion } from 'framer-motion';
 import ProjectOverview from './ProjectOverview';
 import OpenRoles from './OpenRoles';
 import ProjectTimeline from './ProjectTimeline';
@@ -18,6 +17,7 @@ const CreateProject = () => {
         title: '',
         description: '',
         category: '',
+        sourceCodeUrl: '',
         roles: [],
         roadmap: [],
         startDate: '',
@@ -34,6 +34,7 @@ const CreateProject = () => {
             String(currentFormData?.title || '').trim() ||
             String(currentFormData?.description || '').trim() ||
             String(currentFormData?.category || '').trim() ||
+            String(currentFormData?.sourceCodeUrl || '').trim() ||
             String(currentFormData?.startDate || '').trim() ||
             String(currentFormData?.endDate || '').trim() ||
             String(currentFormData?.commitment || '').trim() ||
@@ -73,6 +74,7 @@ const CreateProject = () => {
             title: String(plan?.title || ''),
             description: String(plan?.description || ''),
             category: String(plan?.category || ''),
+            sourceCodeUrl: '',
             roles: mapBlueprintRolesToForm(plan?.roles || []),
             roadmap: Array.isArray(plan?.roadmap)
                 ? plan.roadmap.map((phase, index) => ({
@@ -209,6 +211,7 @@ const CreateProject = () => {
                     title: formData.title,
                     description: formData.description,
                     category: formData.category,
+                    sourceCodeUrl: formData.sourceCodeUrl,
                     startDate: formData.startDate || null,
                     endDate: formData.endDate || null,
                     commitment: formData.commitment,
@@ -253,13 +256,9 @@ const CreateProject = () => {
     if (success) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
-                <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-6"
-                >
+                <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-6">
                     <CheckCircle className="w-10 h-10 text-green-600" />
-                </motion.div>
+                </div>
                 <h2 className="text-3xl font-bold text-gray-900 mb-2">Project Created!</h2>
                 <p className="text-gray-600">Your project is now live and ready for collaborators.</p>
             </div>

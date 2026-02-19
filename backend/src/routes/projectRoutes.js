@@ -62,6 +62,22 @@ function normalizeRoleInput(role) {
   };
 }
 
+function normalizeSourceCodeUrl(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+
+  const hasScheme = /^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(raw);
+  const candidate = hasScheme ? raw : `https://${raw}`;
+
+  try {
+    const url = new URL(candidate);
+    if (!['http:', 'https:'].includes(url.protocol)) return '';
+    return url.toString();
+  } catch (_error) {
+    return '';
+  }
+}
+
 function normalizeStringArray(values) {
   const baseValues = Array.isArray(values)
     ? values
@@ -601,6 +617,7 @@ function buildProjectAnalysisIdea(project = {}, teamMembers = []) {
   return [
     `Project title: ${project?.title || ''}`,
     `Description: ${project?.description || ''}`,
+    `Source code: ${project?.sourceCodeUrl || 'Not provided'}`,
     `Category: ${project?.category || 'General'}`,
     `Commitment: ${project?.commitment || 'Flexible'}`,
     `Current open roles: ${rolesText || 'None'}`,
@@ -743,6 +760,7 @@ function toProjectListItem(project, currentUserId = null) {
     progress: project.progress,
     type: normalizeProjectType(project.status),
     category: project.category,
+    sourceCodeUrl: String(project.sourceCodeUrl || '').trim(),
     commitment: project.commitment,
     startDate: project.startDate,
     endDate: project.endDate,
@@ -848,6 +866,7 @@ function toProjectDetail(project, currentUser) {
     shortDescription: project.description,
     fullDescription: project.description,
     category: project.category || 'General',
+    sourceCodeUrl: String(project.sourceCodeUrl || '').trim(),
     startDate: formatReadableDate(project.startDate || project.createdAt),
     isOwner,
     isMember,
@@ -1002,6 +1021,7 @@ router.post('/', protect, async (req, res) => {
       title,
       description,
       category = '',
+      sourceCodeUrl = '',
       roles = [],
       roadmap = [],
       startDate = null,
@@ -1017,12 +1037,20 @@ router.post('/', protect, async (req, res) => {
       ? roles.map(normalizeRoleInput).filter(Boolean)
       : [];
     const normalizedRoadmap = normalizeRoadmapInput(roadmap);
+    const normalizedSourceCodeUrl = normalizeSourceCodeUrl(sourceCodeUrl);
+
+    if (String(sourceCodeUrl || '').trim() && !normalizedSourceCodeUrl) {
+      return res.status(400).json({
+        error: 'Invalid source code URL. Use a valid http/https Git repository link.',
+      });
+    }
 
     const project = await Project.create({
       owner: req.user._id,
       title: String(title).trim(),
       description: String(description).trim(),
       category: String(category || '').trim(),
+      sourceCodeUrl: normalizedSourceCodeUrl,
       roles: normalizedRoles,
       roadmap: normalizedRoadmap,
       startDate: startDate || null,
@@ -1430,6 +1458,52 @@ router.patch('/:id/progress', protect, async (req, res) => {
     });
   } catch (error) {
     console.error('Update project progress error:', error);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// @desc    Update project source code URL (owner or team member)
+// @route   PATCH /api/project/:id/source-code
+// @access  Private
+router.patch('/:id/source-code', protect, async (req, res) => {
+  try {
+    if (!Object.prototype.hasOwnProperty.call(req.body || {}, 'sourceCodeUrl')) {
+      return res.status(400).json({ error: 'sourceCodeUrl is required' });
+    }
+
+    const rawSourceCodeUrl = String(req.body?.sourceCodeUrl || '').trim();
+    const normalizedSourceCodeUrl = normalizeSourceCodeUrl(rawSourceCodeUrl);
+    if (rawSourceCodeUrl && !normalizedSourceCodeUrl) {
+      return res.status(400).json({
+        error: 'Invalid source code URL. Use a valid http/https Git repository link.',
+      });
+    }
+
+    const project = await Project.findById(req.params.id)
+      .populate('owner', 'name email')
+      .populate('members.user', 'name email');
+
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    if (!isProjectCollaborator(project, req.user._id)) {
+      return res.status(403).json({
+        error: 'Only project owner or team members can update source code URL',
+      });
+    }
+
+    project.sourceCodeUrl = normalizedSourceCodeUrl;
+    await project.save();
+
+    return res.status(200).json({
+      message: normalizedSourceCodeUrl
+        ? 'Project source code URL updated'
+        : 'Project source code URL removed',
+      project: toProjectDetail(project, req.user),
+    });
+  } catch (error) {
+    console.error('Update project source code URL error:', error);
     return res.status(500).json({ error: 'Server error' });
   }
 });
