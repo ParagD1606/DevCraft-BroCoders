@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Paperclip, MoreVertical, Phone, Video } from 'lucide-react';
+import { Send, Paperclip, MoreVertical, Phone, Video, Users } from 'lucide-react';
 import MessageBubble from './MessageBubble';
 
 const ChatWindow = ({ activeConversation, currentUser, messages, onSend, connectionStatus }) => {
@@ -41,6 +41,11 @@ const ChatWindow = ({ activeConversation, currentUser, messages, onSend, connect
     };
 
     const otherUser = getOtherUser();
+    const isGroupChat = Boolean(activeConversation?.isGroupChat || activeConversation?.project);
+    const groupTitle = activeConversation?.chatName || activeConversation?.project?.title || 'Project Group';
+    const participantCount = Array.isArray(activeConversation?.participants)
+        ? activeConversation.participants.length
+        : 0;
 
     if (!activeConversation) {
         return (
@@ -59,20 +64,30 @@ const ChatWindow = ({ activeConversation, currentUser, messages, onSend, connect
             <div className="bg-white p-4 border-b border-gray-200 flex justify-between items-center shadow-sm z-10">
                 <div className="flex items-center gap-3">
                     <div className="relative">
-                        <img
-                            src={otherUser?.avatar || "https://icon-library.com/images/anonymous-avatar-icon/anonymous-avatar-icon-25.jpg"}
-                            alt={otherUser?.name}
-                            className="w-10 h-10 rounded-full object-cover"
-                        />
+                        {isGroupChat ? (
+                            <div className="w-10 h-10 rounded-full bg-blue-50 border border-blue-200 text-blue-700 flex items-center justify-center">
+                                <Users size={18} />
+                            </div>
+                        ) : (
+                            <img
+                                src={otherUser?.avatar || "https://icon-library.com/images/anonymous-avatar-icon/anonymous-avatar-icon-25.jpg"}
+                                alt={otherUser?.name}
+                                className="w-10 h-10 rounded-full object-cover"
+                            />
+                        )}
                         {/* Online status indicator can be added here if we have real-time online status */}
                     </div>
                     <div>
-                        <h3 className="font-bold text-gray-900 leading-tight">{otherUser?.name || "Chat"}</h3>
+                        <h3 className="font-bold text-gray-900 leading-tight">
+                            {isGroupChat ? groupTitle : (otherUser?.name || 'Chat')}
+                        </h3>
                         <span className={`text-xs font-medium ${connectionStatus === 'connected'
                             ? 'text-green-600'
                             : 'text-amber-600'
                             }`}>
-                            {connectionStatus === 'connected' ? 'Online' : 'Connecting...'}
+                            {connectionStatus === 'connected'
+                                ? (isGroupChat ? `${participantCount} members` : 'Online')
+                                : 'Connecting...'}
                         </span>
                     </div>
                 </div>

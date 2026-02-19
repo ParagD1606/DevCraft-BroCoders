@@ -4,6 +4,7 @@ const User = require('../models/User');
 const Notification = require('../models/Notification');
 const { protect } = require('../middleware/authMiddleware');
 const { generateVirtualCtoPlan } = require('../utils/virtualCtoUtils');
+const { ensureProjectGroupChat } = require('../utils/projectChatUtils');
 
 const router = express.Router();
 
@@ -314,6 +315,12 @@ router.post('/', protect, async (req, res) => {
       progress: 0,
       teamSize: 1,
     });
+
+    try {
+      await ensureProjectGroupChat(project);
+    } catch (chatError) {
+      console.error('Ensure project group chat error:', chatError);
+    }
 
     const ownerName = req.user.name || req.user.email || 'Someone';
     try {

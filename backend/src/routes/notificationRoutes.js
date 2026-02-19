@@ -3,6 +3,7 @@ const Notification = require('../models/Notification');
 const Project = require('../models/Project');
 const User = require('../models/User');
 const { protect } = require('../middleware/authMiddleware');
+const { ensureProjectGroupChat } = require('../utils/projectChatUtils');
 
 const router = express.Router();
 
@@ -357,6 +358,17 @@ router.post('/:id/accept', protect, async (req, res) => {
         actorUser: req.user,
         status: 'accepted',
       });
+    }
+
+    if (
+      notification.type === 'project_invite' ||
+      notification.type === 'project_application'
+    ) {
+      try {
+        await ensureProjectGroupChat(project);
+      } catch (chatError) {
+        console.error('Ensure project group chat on acceptance error:', chatError);
+      }
     }
 
     const now = new Date();
