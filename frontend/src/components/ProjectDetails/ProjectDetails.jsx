@@ -1,14 +1,38 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { Loader2, SlidersHorizontal, UserPlus } from 'lucide-react';
+import { useParams } from 'react-router-dom';
+import { Loader2, SlidersHorizontal, UserPlus, PencilLine, Plus, Save, Trash2, X } from 'lucide-react';
 import ProjectHeader from './ProjectHeader';
 import SkillGapHighlight from './SkillGapHighlight';
 import OpenRolesList from './OpenRolesList';
 import TeamGrid from './TeamGrid';
 import { API_BASE_URL } from '../../config/api';
 
+const toPositiveIntegerOrNull = (value) => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric) || numeric <= 0) return null;
+    return Math.round(numeric);
+};
+
+const toCommaSeparatedString = (values) => {
+    if (!Array.isArray(values) || values.length === 0) return '';
+    return values
+        .map((value) => String(value || '').trim())
+        .filter(Boolean)
+        .join(', ');
+};
+
+const toDraftRoadmapPhase = (phase, index) => ({
+    phase: String(phase?.phase || `phase_${index + 1}`),
+    title: String(phase?.title || `Phase ${index + 1}`),
+    objective: String(phase?.objective || ''),
+    startWeek: phase?.startWeek ?? '',
+    endWeek: phase?.endWeek ?? '',
+    durationWeeks: phase?.durationWeeks ?? '',
+    deliverables: toCommaSeparatedString(phase?.deliverables),
+    owners: toCommaSeparatedString(phase?.owners),
+});
+
 const ProjectDetails = () => {
-    const navigate = useNavigate();
     const { id } = useParams();
     const [project, setProject] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -34,6 +58,13 @@ const ProjectDetails = () => {
     const [applyingRoleTitle, setApplyingRoleTitle] = useState('');
     const [applyError, setApplyError] = useState('');
     const [applySuccess, setApplySuccess] = useState('');
+    const [roadmapDraft, setRoadmapDraft] = useState([]);
+    const [roadmapEditing, setRoadmapEditing] = useState(false);
+    const [roadmapSaving, setRoadmapSaving] = useState(false);
+    const [roadmapError, setRoadmapError] = useState('');
+    const [roadmapSuccess, setRoadmapSuccess] = useState('');
+    const roadmap = Array.isArray(project?.roadmap) ? project.roadmap : [];
+    const canEditRoadmap = Boolean(project?.isOwner || project?.isMember);
 
     useEffect(() => {
         const fetchProject = async () => {
@@ -70,7 +101,12 @@ const ProjectDetails = () => {
         if (project && Number.isFinite(Number(project.progress))) {
             setProgressDraft(Number(project.progress));
         }
-    }, [project?.progress]);
+    }, [project]);
+
+    useEffect(() => {
+        const incomingRoadmap = Array.isArray(project?.roadmap) ? project.roadmap : [];
+        setRoadmapDraft(incomingRoadmap.map((phase, index) => toDraftRoadmapPhase(phase, index)));
+    }, [project]);
 
     const handleInvite = async (event) => {
         event.preventDefault();
@@ -223,6 +259,127 @@ const ProjectDetails = () => {
         }
     };
 
+    const handleRoadmapFieldChange = (phaseIndex, field, value) => {
+        setRoadmapDraft((prev) =>
+            prev.map((phase, index) =>
+                index === phaseIndex ? { ...phase, [field]: value } : phase
+            )
+        );
+    };
+
+    const handleAddRoadmapPhase = () => {
+        const nextPhaseNumber = roadmapDraft.length + 1;
+        const lastPhase = roadmapDraft[roadmapDraft.length - 1];
+        const lastEndWeek = toPositiveIntegerOrNull(lastPhase?.endWeek);
+        const defaultStartWeek = lastEndWeek ? lastEndWeek + 1 : '';
+
+        setRoadmapDraft((prev) => [
+            ...prev,
+            {
+                phase: `phase_${nextPhaseNumber}`,
+                title: `Phase ${nextPhaseNumber}`,
+                objective: '',
+                startWeek: defaultStartWeek,
+                endWeek: '',
+                durationWeeks: '',
+                deliverables: '',
+                owners: '',
+            },
+        ]);
+    };
+
+    const handleCreateFirstRoadmapPhase = () => {
+        setRoadmapError('');
+        setRoadmapSuccess('');
+        setRoadmapEditing(true);
+        setRoadmapDraft([
+            {
+                phase: 'phase_1',
+                title: 'Phase 1',
+                objective: '',
+                startWeek: '',
+                endWeek: '',
+                durationWeeks: '',
+                deliverables: '',
+                owners: '',
+            },
+        ]);
+    };
+
+    const handleRemoveRoadmapPhase = (phaseIndex) => {
+        setRoadmapDraft((prev) => prev.filter((_, index) => index !== phaseIndex));
+    };
+
+    const handleStartRoadmapEditing = () => {
+        setRoadmapError('');
+        setRoadmapSuccess('');
+        setRoadmapDraft(roadmap.map((phase, index) => toDraftRoadmapPhase(phase, index)));
+        setRoadmapEditing(true);
+    };
+
+    const handleCancelRoadmapEditing = () => {
+        setRoadmapError('');
+        setRoadmapSuccess('');
+        setRoadmapDraft(roadmap.map((phase, index) => toDraftRoadmapPhase(phase, index)));
+        setRoadmapEditing(false);
+    };
+
+    const handleSaveRoadmap = async () => {
+        setRoadmapError('');
+        setRoadmapSuccess('');
+        setRoadmapSaving(true);
+
+        const payloadRoadmap = roadmapDraft
+            .map((phase, index) => ({
+                phase: String(phase?.phase || `phase_${index + 1}`),
+                title: String(phase?.title || '').trim(),
+                objective: String(phase?.objective || '').trim(),
+                startWeek: toPositiveIntegerOrNull(phase?.startWeek),
+                endWeek: toPositiveIntegerOrNull(phase?.endWeek),
+                durationWeeks: toPositiveIntegerOrNull(phase?.durationWeeks),
+                deliverables: String(phase?.deliverables || '')
+                    .split(',')
+                    .map((item) => item.trim())
+                    .filter(Boolean),
+                owners: String(phase?.owners || '')
+                    .split(',')
+                    .map((item) => item.trim())
+                    .filter(Boolean),
+            }))
+            .filter((phase) => phase.title || phase.objective);
+
+        try {
+            const token = localStorage.getItem('authToken');
+            const response = await fetch(`${API_BASE_URL}/api/project/${id}/roadmap`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({ roadmap: payloadRoadmap }),
+            });
+
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to update roadmap');
+            }
+
+            setProject(data.project || project);
+            setRoadmapEditing(false);
+            setRoadmapSuccess('Roadmap updated successfully.');
+        } catch (actionError) {
+            setRoadmapError(actionError.message || 'Failed to update roadmap');
+        } finally {
+            setRoadmapSaving(false);
+        }
+    };
+
+    const handleJumpToRoadmap = () => {
+        const roadmapSection = document.getElementById('project-roadmap');
+        if (!roadmapSection) return;
+        roadmapSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+
 
 
     if (loading) {
@@ -261,6 +418,238 @@ const ProjectDetails = () => {
                         <div className="prose prose-blue max-w-none text-gray-600 space-y-4 whitespace-pre-line">
                             {project.fullDescription || project.shortDescription}
                         </div>
+                    </div>
+
+                    <div
+                        id="project-roadmap"
+                        className="bg-gradient-to-br from-slate-50 via-white to-blue-50/40 rounded-2xl p-8 shadow-sm border border-blue-100 mb-6"
+                    >
+                        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
+                            <div>
+                                <h3 className="text-xl font-bold text-gray-900">Project Roadmap</h3>
+                                <p className="text-sm text-gray-600 mt-1">
+                                    Shared execution plan. Team members can collaboratively update this timeline.
+                                </p>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs px-2.5 py-1 rounded-full border border-blue-200 bg-blue-50 text-blue-700 font-semibold">
+                                    {roadmapEditing ? roadmapDraft.length : roadmap.length} phase{(roadmapEditing ? roadmapDraft.length : roadmap.length) === 1 ? '' : 's'}
+                                </span>
+
+                                {canEditRoadmap ? (
+                                    roadmapEditing ? (
+                                        <>
+                                            <button
+                                                type="button"
+                                                onClick={handleCancelRoadmapEditing}
+                                                disabled={roadmapSaving}
+                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border border-gray-200 text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed"
+                                            >
+                                                <X className="w-3.5 h-3.5" />
+                                                Cancel
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={handleSaveRoadmap}
+                                                disabled={roadmapSaving}
+                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                                            >
+                                                {roadmapSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                                                {roadmapSaving ? 'Saving...' : 'Save Roadmap'}
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            onClick={handleStartRoadmapEditing}
+                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border border-blue-200 text-blue-700 bg-white hover:bg-blue-50"
+                                        >
+                                            <PencilLine className="w-3.5 h-3.5" />
+                                            Edit
+                                        </button>
+                                    )
+                                ) : null}
+                            </div>
+                        </div>
+
+                        {roadmapError ? (
+                            <div className="mb-3 text-xs text-red-600 bg-red-50 border border-red-100 rounded-md p-2">
+                                {roadmapError}
+                            </div>
+                        ) : null}
+                        {roadmapSuccess ? (
+                            <div className="mb-3 text-xs text-green-700 bg-green-50 border border-green-100 rounded-md p-2">
+                                {roadmapSuccess}
+                            </div>
+                        ) : null}
+
+                        {roadmapEditing ? (
+                            <div className="space-y-4">
+                                {roadmapDraft.map((phase, index) => (
+                                    <div
+                                        key={`${phase.phase || 'phase'}-${index}`}
+                                        className="rounded-xl border border-blue-100 bg-white p-4 shadow-sm"
+                                    >
+                                        <div className="flex items-center justify-between gap-2 mb-3">
+                                            <p className="text-sm font-semibold text-gray-900">Phase {index + 1}</p>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleRemoveRoadmapPhase(index)}
+                                                className="inline-flex items-center gap-1 px-2 py-1 text-xs text-red-600 border border-red-200 rounded-md hover:bg-red-50"
+                                            >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                                Remove
+                                            </button>
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            <input
+                                                type="text"
+                                                value={phase.title}
+                                                onChange={(event) => handleRoadmapFieldChange(index, 'title', event.target.value)}
+                                                placeholder="Phase title"
+                                                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            />
+
+                                            <textarea
+                                                value={phase.objective}
+                                                onChange={(event) => handleRoadmapFieldChange(index, 'objective', event.target.value)}
+                                                placeholder="Objective"
+                                                rows={3}
+                                                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+                                            />
+
+                                            <div className="grid sm:grid-cols-3 gap-2">
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    value={phase.startWeek}
+                                                    onChange={(event) => handleRoadmapFieldChange(index, 'startWeek', event.target.value)}
+                                                    placeholder="Start week"
+                                                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                />
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    value={phase.endWeek}
+                                                    onChange={(event) => handleRoadmapFieldChange(index, 'endWeek', event.target.value)}
+                                                    placeholder="End week"
+                                                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                />
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    value={phase.durationWeeks}
+                                                    onChange={(event) => handleRoadmapFieldChange(index, 'durationWeeks', event.target.value)}
+                                                    placeholder="Duration weeks"
+                                                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                />
+                                            </div>
+
+                                            <input
+                                                type="text"
+                                                value={phase.deliverables}
+                                                onChange={(event) => handleRoadmapFieldChange(index, 'deliverables', event.target.value)}
+                                                placeholder="Deliverables (comma separated)"
+                                                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            />
+
+                                            <input
+                                                type="text"
+                                                value={phase.owners}
+                                                onChange={(event) => handleRoadmapFieldChange(index, 'owners', event.target.value)}
+                                                placeholder="Owners (comma separated)"
+                                                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            />
+                                        </div>
+                                    </div>
+                                ))}
+
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={handleAddRoadmapPhase}
+                                        className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-md border border-blue-200 text-blue-700 bg-white hover:bg-blue-50"
+                                    >
+                                        <Plus className="w-3.5 h-3.5" />
+                                        Add Phase
+                                    </button>
+                                    <span className="text-xs text-gray-500">
+                                        Any owner or team member can edit this roadmap.
+                                    </span>
+                                </div>
+                            </div>
+                        ) : roadmap.length > 0 ? (
+                            <div className="relative">
+                                {roadmap.map((phase, index) => (
+                                    <div
+                                        key={phase.id || `${phase.phase || 'phase'}-${index}`}
+                                        className="relative pl-8 pb-6 last:pb-0"
+                                    >
+                                        {index < roadmap.length - 1 ? (
+                                            <span className="absolute left-[7px] top-6 bottom-0 w-px bg-blue-200" />
+                                        ) : null}
+                                        <span className="absolute left-0 top-1.5 w-4 h-4 rounded-full border-2 border-blue-400 bg-white" />
+
+                                        <div className="rounded-xl border border-blue-100 bg-white p-4 shadow-sm">
+                                            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                                                <h4 className="text-sm font-semibold text-gray-900">
+                                                    {phase.title || `Phase ${index + 1}`}
+                                                </h4>
+                                                <span className="text-[11px] font-semibold text-blue-700 bg-blue-50 border border-blue-100 px-2 py-1 rounded-md">
+                                                    {Number.isFinite(Number(phase.startWeek)) && Number.isFinite(Number(phase.endWeek))
+                                                        ? `Week ${Number(phase.startWeek)} - ${Number(phase.endWeek)}`
+                                                        : Number.isFinite(Number(phase.durationWeeks))
+                                                            ? `${Number(phase.durationWeeks)} week${Number(phase.durationWeeks) > 1 ? 's' : ''}`
+                                                            : 'Planned'}
+                                                </span>
+                                            </div>
+
+                                            {phase.objective ? (
+                                                <p className="text-sm text-gray-600 mb-3">{phase.objective}</p>
+                                            ) : null}
+
+                                            {Array.isArray(phase.deliverables) && phase.deliverables.length > 0 ? (
+                                                <div className="mb-2">
+                                                    <p className="text-[11px] font-semibold text-gray-600 uppercase tracking-wide mb-1">
+                                                        Deliverables
+                                                    </p>
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        {phase.deliverables.map((item) => (
+                                                            <span
+                                                                key={item}
+                                                                className="text-[11px] px-2 py-1 rounded-md bg-gray-100 text-gray-700 border border-gray-200"
+                                                            >
+                                                                {item}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            ) : null}
+
+                                            {Array.isArray(phase.owners) && phase.owners.length > 0 ? (
+                                                <p className="text-xs text-gray-500">Owners: {phase.owners.join(', ')}</p>
+                                            ) : null}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="rounded-xl border border-dashed border-blue-200 bg-white/80 p-5 text-sm text-gray-600 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                <span>No roadmap has been defined yet.</span>
+                                {canEditRoadmap ? (
+                                    <button
+                                        type="button"
+                                        onClick={handleCreateFirstRoadmapPhase}
+                                        className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 w-fit"
+                                    >
+                                        <Plus className="w-3.5 h-3.5" />
+                                        Add First Phase
+                                    </button>
+                                ) : null}
+                            </div>
+                        )}
                     </div>
 
                     {applyError ? (
@@ -463,10 +852,18 @@ const ProjectDetails = () => {
                     {/* Quick Links / Resources Placeholder */}
                     <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
                         <h3 className="font-bold text-gray-900 mb-4">Resources</h3>
-                        <ul className="space-y-2 text-sm text-blue-600">
-                            <li><a href="#" className="hover:underline">Project Roadmap</a></li>
-                            <li><a href="#" className="hover:underline">Design System</a></li>
-                            <li><a href="#" className="hover:underline">API Documentation</a></li>
+                        <ul className="space-y-2 text-sm">
+                            <li>
+                                <button
+                                    type="button"
+                                    onClick={handleJumpToRoadmap}
+                                    className="text-blue-600 hover:underline"
+                                >
+                                    Project Roadmap
+                                </button>
+                            </li>
+                            <li className="text-gray-500">Design System (coming soon)</li>
+                            <li className="text-gray-500">API Documentation (coming soon)</li>
                         </ul>
                     </div>
                 </div>

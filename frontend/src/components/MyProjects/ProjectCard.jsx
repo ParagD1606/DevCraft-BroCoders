@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, Users, MoreVertical, ArrowRight } from 'lucide-react';
+import { Calendar, Users, MoreVertical, ArrowRight, Route } from 'lucide-react';
 
 const ProjectCard = ({ project }) => {
     const navigate = useNavigate();
@@ -38,6 +38,12 @@ const ProjectCard = ({ project }) => {
                     <Calendar size={14} />
                     <span>Due {project.dueDate}</span>
                 </div>
+                {Number(project.roadmapPhaseCount) > 0 ? (
+                    <div className="flex items-center gap-1">
+                        <Route size={14} />
+                        <span>{Number(project.roadmapPhaseCount)} phases</span>
+                    </div>
+                ) : null}
             </div>
 
             <div className="mb-6">

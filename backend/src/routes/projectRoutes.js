@@ -62,6 +62,154 @@ function normalizeRoleInput(role) {
   };
 }
 
+function normalizeStringArray(values) {
+  const baseValues = Array.isArray(values)
+    ? values
+    : String(values || '')
+        .split(',')
+        .map((value) => String(value || '').trim())
+        .filter(Boolean);
+
+  return Array.from(
+    new Set(baseValues.map((value) => String(value || '').trim()).filter(Boolean))
+  ).slice(0, 12);
+}
+
+function normalizeRoadmapInput(roadmap) {
+  if (!Array.isArray(roadmap)) return [];
+
+  return roadmap
+    .map((phase, index) => {
+      const title = String(phase?.title || '').trim();
+      const objective = String(phase?.objective || '').trim();
+      const normalizedTitle = title || (objective ? `Phase ${index + 1}` : '');
+      if (!normalizedTitle) return null;
+
+      const startWeekInput = Number(phase?.startWeek);
+      const endWeekInput = Number(phase?.endWeek);
+      const durationWeeksInput = Number(phase?.durationWeeks);
+
+      const startWeek = Number.isFinite(startWeekInput) && startWeekInput > 0
+        ? Math.round(startWeekInput)
+        : null;
+      const endWeek = Number.isFinite(endWeekInput) && endWeekInput > 0
+        ? Math.round(endWeekInput)
+        : null;
+      const durationWeeks = Number.isFinite(durationWeeksInput) && durationWeeksInput > 0
+        ? Math.round(durationWeeksInput)
+        : startWeek && endWeek
+          ? Math.max(1, endWeek - startWeek + 1)
+          : null;
+
+      const normalizedStartWeek = startWeek && endWeek && endWeek < startWeek ? endWeek : startWeek;
+      const normalizedEndWeek = startWeek && endWeek && endWeek < startWeek ? startWeek : endWeek;
+
+      return {
+        phase: String(phase?.phase || `phase_${index + 1}`).trim(),
+        title: normalizedTitle,
+        objective,
+        startWeek: normalizedStartWeek,
+        endWeek: normalizedEndWeek,
+        durationWeeks,
+        deliverables: normalizeStringArray(phase?.deliverables || []),
+        owners: normalizeStringArray(phase?.owners || []),
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 12);
+}
+
+function isProjectMember(project, userId) {
+  const normalizedUserId = String(userId || '');
+  if (!normalizedUserId) return false;
+  return Array.isArray(project?.members)
+    ? project.members.some(
+        (member) => String(member?.user?._id || member?.user || '') === normalizedUserId
+      )
+    : false;
+}
+
+function isProjectCollaborator(project, userId) {
+  const normalizedUserId = String(userId || '');
+  if (!normalizedUserId) return false;
+  const ownerId = String(project?.owner?._id || project?.owner || '');
+  if (ownerId && ownerId === normalizedUserId) return true;
+  return isProjectMember(project, normalizedUserId);
+}
+
+function estimateProjectWeeks(project = {}) {
+  const startDate = new Date(project.startDate || project.createdAt || Date.now());
+  const endDate = new Date(project.endDate || Date.now());
+
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+    return 8;
+  }
+
+  const diffMs = endDate.getTime() - startDate.getTime();
+  if (diffMs <= 0) return 8;
+
+  const diffWeeks = Math.ceil(diffMs / (7 * 24 * 60 * 60 * 1000));
+  return Math.max(4, Math.min(52, diffWeeks));
+}
+
+function buildFallbackRoadmap(project = {}) {
+  const totalWeeks = estimateProjectWeeks(project);
+  const split = [
+    Math.max(1, Math.round(totalWeeks * 0.2)),
+    Math.max(1, Math.round(totalWeeks * 0.25)),
+    Math.max(1, Math.round(totalWeeks * 0.35)),
+  ];
+  const allocated = split.reduce((sum, value) => sum + value, 0);
+  const phaseWeeks = [...split, Math.max(1, totalWeeks - allocated)];
+  const roleOwners = (Array.isArray(project.roles) ? project.roles : [])
+    .map((role) => String(role?.title || '').trim())
+    .filter(Boolean)
+    .slice(0, 3);
+
+  let weekCursor = 1;
+  const defaultPhases = [
+    {
+      phase: 'phase_1',
+      title: 'Discovery and Planning',
+      objective: 'Finalize scope, goals, and implementation plan.',
+      deliverables: ['Scope doc', 'Milestones', 'Task backlog'],
+    },
+    {
+      phase: 'phase_2',
+      title: 'Foundation Setup',
+      objective: 'Set up project architecture, environments, and core modules.',
+      deliverables: ['Repo setup', 'Core architecture', 'Initial APIs'],
+    },
+    {
+      phase: 'phase_3',
+      title: 'Feature Development',
+      objective: 'Implement and integrate key user-facing features.',
+      deliverables: ['Core features', 'Integration tests', 'Feedback iteration'],
+    },
+    {
+      phase: 'phase_4',
+      title: 'Stabilization and Launch',
+      objective: 'Polish, test, and prepare for release.',
+      deliverables: ['QA pass', 'Performance checks', 'Launch checklist'],
+    },
+  ];
+
+  return defaultPhases.map((phase, index) => {
+    const durationWeeks = phaseWeeks[index];
+    const startWeek = weekCursor;
+    const endWeek = weekCursor + durationWeeks - 1;
+    weekCursor = endWeek + 1;
+
+    return {
+      ...phase,
+      startWeek,
+      endWeek,
+      durationWeeks,
+      owners: roleOwners.length > 0 ? roleOwners : ['Project Team'],
+    };
+  });
+}
+
 function tokenizeText(text) {
   return String(text || '')
     .toLowerCase()
@@ -430,6 +578,11 @@ function toProjectListItem(project, currentUserId = null) {
     role = membership?.role || 'Member';
   }
 
+  const roadmap =
+    Array.isArray(project?.roadmap) && project.roadmap.length > 0
+      ? project.roadmap
+      : buildFallbackRoadmap(project);
+
   return {
     id: String(project._id),
     title: project.title,
@@ -445,6 +598,7 @@ function toProjectListItem(project, currentUserId = null) {
     startDate: project.startDate,
     endDate: project.endDate,
     roles: project.roles || [],
+    roadmapPhaseCount: roadmap.length,
     createdAt: project.createdAt,
     updatedAt: project.updatedAt,
   };
@@ -510,6 +664,11 @@ function toProjectDetail(project, currentUser) {
     })
     .filter(Boolean);
 
+  const sourceRoadmap =
+    Array.isArray(project?.roadmap) && project.roadmap.length > 0
+      ? project.roadmap
+      : buildFallbackRoadmap(project);
+
   return {
     id: String(project._id),
     title: project.title,
@@ -531,6 +690,29 @@ function toProjectDetail(project, currentUser) {
       spots: Number.isFinite(Number(role.spots)) ? Number(role.spots) : 1,
       durationHours: Number(role.durationHours) || null,
     })),
+    roadmap: sourceRoadmap.map((phase, index) => {
+      const normalizedStartWeek = Number(phase?.startWeek);
+      const normalizedEndWeek = Number(phase?.endWeek);
+      const normalizedDurationWeeks = Number(phase?.durationWeeks);
+      return {
+        id: `${project._id}-roadmap-${index}`,
+        phase: String(phase?.phase || `phase_${index + 1}`),
+        title: String(phase?.title || `Phase ${index + 1}`),
+        objective: String(phase?.objective || ''),
+        startWeek:
+          Number.isFinite(normalizedStartWeek) && normalizedStartWeek > 0
+            ? normalizedStartWeek
+            : null,
+        endWeek:
+          Number.isFinite(normalizedEndWeek) && normalizedEndWeek > 0 ? normalizedEndWeek : null,
+        durationWeeks:
+          Number.isFinite(normalizedDurationWeeks) && normalizedDurationWeeks > 0
+            ? normalizedDurationWeeks
+            : null,
+        deliverables: normalizeStringArray(phase?.deliverables || []),
+        owners: normalizeStringArray(phase?.owners || []),
+      };
+    }),
     team: [
       {
         id: ownerId,
@@ -649,6 +831,7 @@ router.post('/', protect, async (req, res) => {
       description,
       category = '',
       roles = [],
+      roadmap = [],
       startDate = null,
       endDate = null,
       commitment = '',
@@ -661,6 +844,7 @@ router.post('/', protect, async (req, res) => {
     const normalizedRoles = Array.isArray(roles)
       ? roles.map(normalizeRoleInput).filter(Boolean)
       : [];
+    const normalizedRoadmap = normalizeRoadmapInput(roadmap);
 
     const project = await Project.create({
       owner: req.user._id,
@@ -668,6 +852,7 @@ router.post('/', protect, async (req, res) => {
       description: String(description).trim(),
       category: String(category || '').trim(),
       roles: normalizedRoles,
+      roadmap: normalizedRoadmap,
       startDate: startDate || null,
       endDate: endDate || null,
       commitment: String(commitment || '').trim(),
@@ -1073,6 +1258,47 @@ router.patch('/:id/progress', protect, async (req, res) => {
     });
   } catch (error) {
     console.error('Update project progress error:', error);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// @desc    Update project roadmap (owner or team member)
+// @route   PATCH /api/project/:id/roadmap
+// @access  Private
+router.patch('/:id/roadmap', protect, async (req, res) => {
+  try {
+    if (!Object.prototype.hasOwnProperty.call(req.body || {}, 'roadmap')) {
+      return res.status(400).json({ error: 'roadmap array is required' });
+    }
+
+    if (!Array.isArray(req.body.roadmap)) {
+      return res.status(400).json({ error: 'roadmap must be an array' });
+    }
+
+    const normalizedRoadmap = normalizeRoadmapInput(req.body.roadmap);
+    const project = await Project.findById(req.params.id)
+      .populate('owner', 'name email')
+      .populate('members.user', 'name email');
+
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    if (!isProjectCollaborator(project, req.user._id)) {
+      return res.status(403).json({
+        error: 'Only project owner or team members can update roadmap',
+      });
+    }
+
+    project.roadmap = normalizedRoadmap;
+    await project.save();
+
+    return res.status(200).json({
+      message: 'Project roadmap updated',
+      project: toProjectDetail(project, req.user),
+    });
+  } catch (error) {
+    console.error('Update project roadmap error:', error);
     return res.status(500).json({ error: 'Server error' });
   }
 });
