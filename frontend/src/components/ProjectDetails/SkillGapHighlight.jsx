@@ -1,7 +1,7 @@
 import React from 'react';
 import { AlertTriangle, ChevronRight } from 'lucide-react';
 
-const SkillGapHighlight = ({ missingSkills }) => {
+const SkillGapHighlight = ({ missingSkills, onReviewGaps, reviewing = false }) => {
     if (!missingSkills || missingSkills.length === 0) return null;
 
     return (
@@ -19,13 +19,18 @@ const SkillGapHighlight = ({ missingSkills }) => {
                         <h3 className="text-lg font-bold text-gray-900">Skill Gap Detected</h3>
                     </div>
                     <p className="text-gray-600 max-w-xl">
-                        This project requires proficiency in <strong>{missingSkills.join(', ')}</strong>.
-                        Taking a quick verification test could verify your skills and boost your match score by 25%.
+                        Current project coverage is missing <strong>{missingSkills.join(', ')}</strong>.
+                        Add teammates or open roles in these areas to reduce delivery risk.
                     </p>
                 </div>
 
-                <button className="flex items-center px-4 py-2 bg-white text-orange-600 border border-orange-200 rounded-lg hover:bg-orange-50 transition-colors font-medium shadow-sm whitespace-nowrap">
-                    Verify Skills
+                <button
+                    type="button"
+                    onClick={onReviewGaps}
+                    disabled={reviewing}
+                    className="flex items-center px-4 py-2 bg-white text-orange-600 border border-orange-200 rounded-lg hover:bg-orange-50 transition-colors font-medium shadow-sm whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                    {reviewing ? 'Analyzing...' : 'Review Gaps'}
                     <ChevronRight size={16} className="ml-2" />
                 </button>
             </div>

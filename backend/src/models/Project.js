@@ -153,6 +153,10 @@ const projectSchema = new mongoose.Schema(
       default: 1,
       min: 1,
     },
+    latestAnalysis: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
   },
   {
     timestamps: true,

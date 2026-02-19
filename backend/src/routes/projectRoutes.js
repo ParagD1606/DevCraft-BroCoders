@@ -564,6 +564,155 @@ function writeStreamChunk(res, payload) {
   res.write(`${JSON.stringify(payload)}\n`);
 }
 
+function uniqueCaseInsensitive(values = []) {
+  const seen = new Set();
+  const result = [];
+  for (const rawValue of Array.isArray(values) ? values : []) {
+    const value = String(rawValue || '').trim();
+    if (!value) continue;
+    const key = value.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(value);
+  }
+  return result;
+}
+
+function buildProjectAnalysisIdea(project = {}, teamMembers = []) {
+  const rolesText = (Array.isArray(project?.roles) ? project.roles : [])
+    .map((role) => {
+      const title = String(role?.title || '').trim();
+      const skills = Array.isArray(role?.skills) ? role.skills.join(', ') : '';
+      const spots = Number(role?.spots) || 0;
+      return `${title} (skills: ${skills}; open spots: ${spots})`;
+    })
+    .filter(Boolean)
+    .join(' | ');
+
+  const teamText = (Array.isArray(teamMembers) ? teamMembers : [])
+    .map((member) => {
+      const name = member?.name || member?.email || 'Member';
+      const role = member?.projectRole || 'Contributor';
+      const skills = Array.isArray(member?.skills) ? member.skills.join(', ') : '';
+      return `${name} as ${role} (skills: ${skills})`;
+    })
+    .join(' | ');
+
+  return [
+    `Project title: ${project?.title || ''}`,
+    `Description: ${project?.description || ''}`,
+    `Category: ${project?.category || 'General'}`,
+    `Commitment: ${project?.commitment || 'Flexible'}`,
+    `Current open roles: ${rolesText || 'None'}`,
+    `Current team (${teamMembers.length} members): ${teamText || 'No team members listed'}`,
+    `Goal: analyze skill gaps, propose required skills, and recommend openings and candidates.`,
+  ]
+    .filter(Boolean)
+    .join('. ');
+}
+
+function getRoleRequiredSkills(role) {
+  return uniqueCaseInsensitive(
+    (Array.isArray(role?.skills) ? role.skills : []).map((skill) => String(skill || '').trim())
+  );
+}
+
+function scoreRoleCandidate(role, candidate) {
+  const roleSkills = new Set(getRoleRequiredSkills(role).map((skill) => skill.toLowerCase()));
+  const candidateSkills = new Set(
+    (Array.isArray(candidate?.skills) ? candidate.skills : [])
+      .map((skill) => String(skill || '').trim().toLowerCase())
+      .filter(Boolean)
+  );
+  if (roleSkills.size === 0) return { score: 0, matchedSkills: [] };
+
+  const matchedSkills = [...roleSkills].filter((skill) => candidateSkills.has(skill));
+  return {
+    score: Number((matchedSkills.length / roleSkills.size).toFixed(6)),
+    matchedSkills,
+  };
+}
+
+function buildRoleCandidateMatches(roles = [], candidates = [], topPerRole = 8) {
+  return (Array.isArray(roles) ? roles : [])
+    .map((role) => {
+      const rankedCandidates = (Array.isArray(candidates) ? candidates : [])
+        .map((candidate) => {
+          const roleScore = scoreRoleCandidate(role, candidate);
+          const blendedScore = Number(
+            (roleScore.score * 0.7 + Number(candidate?.matchScore || 0) * 0.3).toFixed(6)
+          );
+          return {
+            ...candidate,
+            roleScore: roleScore.score,
+            matchedRoleSkills: roleScore.matchedSkills,
+            blendedRoleScore: blendedScore,
+          };
+        })
+        .filter((candidate) => candidate.roleScore > 0)
+        .sort((a, b) => b.blendedRoleScore - a.blendedRoleScore)
+        .slice(0, Math.max(1, Number(topPerRole) || 8));
+
+      return {
+        role: {
+          title: String(role?.title || '').trim(),
+          skills: getRoleRequiredSkills(role),
+          spots: Number(role?.spots) > 0 ? Number(role.spots) : 1,
+        },
+        candidates: rankedCandidates,
+      };
+    })
+    .filter((entry) => entry.role.title);
+}
+
+function mergeSuggestedRolesIntoProject(project, suggestedRoles = []) {
+  const currentRoles = Array.isArray(project?.roles) ? project.roles : [];
+  const currentByTitle = new Map(
+    currentRoles.map((role) => [String(role?.title || '').trim().toLowerCase(), role])
+  );
+
+  let updated = false;
+  for (const suggestedRole of Array.isArray(suggestedRoles) ? suggestedRoles : []) {
+    const title = String(suggestedRole?.title || '').trim();
+    if (!title) continue;
+    const key = title.toLowerCase();
+    const suggestedSkills = getRoleRequiredSkills(suggestedRole);
+
+    if (currentByTitle.has(key)) {
+      const existing = currentByTitle.get(key);
+      const mergedSkills = uniqueCaseInsensitive([
+        ...(Array.isArray(existing?.skills) ? existing.skills : []),
+        ...suggestedSkills,
+      ]);
+      if (mergedSkills.length !== (Array.isArray(existing?.skills) ? existing.skills.length : 0)) {
+        existing.skills = mergedSkills;
+        updated = true;
+      }
+      if (Number(existing?.spots) < 1) {
+        existing.spots = 1;
+        updated = true;
+      }
+      continue;
+    }
+
+    currentRoles.push({
+      title,
+      skills: suggestedSkills,
+      spots: Number(suggestedRole?.spots) > 0 ? Number(suggestedRole.spots) : 1,
+      durationHours:
+        Number.isFinite(Number(suggestedRole?.durationHours)) && Number(suggestedRole.durationHours) > 0
+          ? Number(suggestedRole.durationHours)
+          : null,
+    });
+    updated = true;
+  }
+
+  if (updated) {
+    project.roles = currentRoles;
+  }
+  return updated;
+}
+
 function toProjectListItem(project, currentUserId = null) {
   const ownerId = String(project?.owner?._id || project?.owner || '');
   const normalizedCurrentUserId = currentUserId ? String(currentUserId) : '';
@@ -613,6 +762,28 @@ function formatReadableDate(dateValue) {
     day: '2-digit',
     year: 'numeric',
   });
+}
+
+function sanitizeProjectAnalysis(analysis) {
+  if (!analysis || typeof analysis !== 'object') return null;
+
+  const safeAnalysis = {
+    analyzedAt: analysis.analyzedAt || null,
+    autoUpdated: Boolean(analysis.autoUpdated),
+    plan: analysis.plan || null,
+    requiredSkills: Array.isArray(analysis.requiredSkills) ? analysis.requiredSkills : [],
+    projectSkillGap: Array.isArray(analysis.projectSkillGap) ? analysis.projectSkillGap : [],
+    candidates: Array.isArray(analysis.candidates) ? analysis.candidates : [],
+    teammateSuggestions: Array.isArray(analysis.teammateSuggestions)
+      ? analysis.teammateSuggestions
+      : [],
+    roleCandidateMatches: Array.isArray(analysis.roleCandidateMatches)
+      ? analysis.roleCandidateMatches
+      : [],
+    meta: analysis.meta && typeof analysis.meta === 'object' ? analysis.meta : {},
+  };
+
+  return safeAnalysis;
 }
 
 function toProjectDetail(project, currentUser) {
@@ -725,6 +896,7 @@ function toProjectDetail(project, currentUser) {
       },
       ...teamMembers,
     ],
+    latestAnalysis: isOwner ? sanitizeProjectAnalysis(project.latestAnalysis) : null,
   };
 }
 
@@ -1299,6 +1471,159 @@ router.patch('/:id/roadmap', protect, async (req, res) => {
     });
   } catch (error) {
     console.error('Update project roadmap error:', error);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// @desc    Analyze project, update openings/skills, and suggest candidates
+// @route   POST /api/project/:id/analyze
+// @access  Private
+router.post('/:id/analyze', protect, async (req, res) => {
+  try {
+    const project = await Project.findById(req.params.id)
+      .populate('owner', 'name email')
+      .populate('members.user', 'name email skills role');
+
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    const ownerId = String(project.owner?._id || project.owner || '');
+    const requesterId = String(req.user._id || '');
+    const requesterIsOwner = ownerId === requesterId;
+    if (!requesterIsOwner) {
+      return res.status(403).json({ error: 'Only the project owner can analyze this project' });
+    }
+
+    const projectTeamMembers = [
+      {
+        id: ownerId,
+        name: project.owner?.name || project.owner?.email || 'Project Owner',
+        email: project.owner?.email || '',
+        projectRole: 'Project Owner',
+        skills: [],
+      },
+      ...(Array.isArray(project.members) ? project.members : []).map((member) => ({
+        id: String(member?.user?._id || member?.user || ''),
+        name: member?.user?.name || member?.user?.email || 'Team Member',
+        email: member?.user?.email || '',
+        projectRole: member?.role || 'Contributor',
+        skills: Array.isArray(member?.user?.skills) ? member.user.skills : [],
+      })),
+    ];
+
+    const rawIdea = buildProjectAnalysisIdea(project, projectTeamMembers);
+    const virtualCtoPayload = await buildVirtualCtoPackage({
+      rawIdea,
+      user: req.user,
+    });
+
+    const suggestedRoles = Array.isArray(virtualCtoPayload?.plan?.roles)
+      ? virtualCtoPayload.plan.roles
+      : [];
+    const requiredSkills = getPlanRequiredSkills(virtualCtoPayload?.plan);
+    const projectCurrentSkills = uniqueCaseInsensitive(
+      (Array.isArray(project.roles) ? project.roles : [])
+        .flatMap((role) => (Array.isArray(role?.skills) ? role.skills : []))
+        .map((skill) => String(skill || '').trim())
+    );
+    const projectSkillGap = requiredSkills.filter(
+      (skill) => !projectCurrentSkills.map((s) => s.toLowerCase()).includes(String(skill).toLowerCase())
+    );
+
+    const autoUpdated = mergeSuggestedRolesIntoProject(project, suggestedRoles);
+
+    const roleCandidateMatches = buildRoleCandidateMatches(
+      toProjectDetail(project, req.user).roles || [],
+      virtualCtoPayload.candidates || [],
+      10
+    );
+
+    const analyzedAt = new Date().toISOString();
+    const savedAnalysis = {
+      analyzedAt,
+      autoUpdated,
+      plan: virtualCtoPayload.plan || null,
+      requiredSkills,
+      projectSkillGap,
+      candidates: virtualCtoPayload.candidates || [],
+      teammateSuggestions: virtualCtoPayload.teammateSuggestions || [],
+      roleCandidateMatches,
+      meta: virtualCtoPayload.meta || {},
+    };
+
+    project.latestAnalysis = savedAnalysis;
+    await project.save();
+
+    const updatedProject = await Project.findById(project._id)
+      .populate('owner', 'name email')
+      .populate('members.user', 'name email');
+    const updatedProjectDetail = toProjectDetail(updatedProject || project, req.user);
+
+    return res.status(200).json({
+      message: autoUpdated
+        ? 'Project analyzed and openings updated automatically.'
+        : 'Project analyzed successfully.',
+      analyzedAt,
+      autoUpdated,
+      project: updatedProjectDetail,
+      analysis: savedAnalysis,
+    });
+  } catch (error) {
+    console.error('Project analyze error:', error);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// @desc    Open positions from latest project analysis (owner only)
+// @route   POST /api/project/:id/open-positions
+// @access  Private
+router.post('/:id/open-positions', protect, async (req, res) => {
+  try {
+    const project = await Project.findById(req.params.id)
+      .populate('owner', 'name email')
+      .populate('members.user', 'name email');
+
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    if (String(project.owner?._id || project.owner) !== String(req.user._id)) {
+      return res.status(403).json({ error: 'Only the project owner can open positions' });
+    }
+
+    const suggestedRoles = Array.isArray(project?.latestAnalysis?.plan?.roles)
+      ? project.latestAnalysis.plan.roles
+      : [];
+
+    if (suggestedRoles.length === 0) {
+      return res.status(400).json({
+        error: 'No analyzed role suggestions found. Analyze the project first.',
+      });
+    }
+
+    const updated = mergeSuggestedRolesIntoProject(project, suggestedRoles);
+    if (!updated) {
+      return res.status(200).json({
+        message: 'All analyzed positions are already open.',
+        updated: false,
+        project: toProjectDetail(project, req.user),
+      });
+    }
+
+    await project.save();
+
+    const refreshed = await Project.findById(project._id)
+      .populate('owner', 'name email')
+      .populate('members.user', 'name email');
+
+    return res.status(200).json({
+      message: 'Open positions were added from the latest analysis.',
+      updated: true,
+      project: toProjectDetail(refreshed || project, req.user),
+    });
+  } catch (error) {
+    console.error('Open positions from analysis error:', error);
     return res.status(500).json({ error: 'Server error' });
   }
 });

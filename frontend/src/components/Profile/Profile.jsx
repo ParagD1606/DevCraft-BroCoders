@@ -3,6 +3,7 @@ import ProfileHeader from './ProfileHeader';
 import ProfileStats from './ProfileStats';
 import AvailabilityCalendar from './AvailabilityCalendar';
 import EditProfileModal from './EditProfileModal';
+import ProfileProjectRecommendations from './ProfileProjectRecommendations';
 import { Loader2 } from 'lucide-react';
 import { API_BASE_URL } from '../../config/api';
 import { markdownToHtml } from '../../utils/markdownToHtml';
@@ -446,6 +447,11 @@ const Profile = () => {
                     </div>
                 </div>
             </div>
+
+            <ProfileProjectRecommendations
+                userId={user.id || user._id || ''}
+                userSkills={user.skills || []}
+            />
 
             {isEditing && (
                 <EditProfileModal

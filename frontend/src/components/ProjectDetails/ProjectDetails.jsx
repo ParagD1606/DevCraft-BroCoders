@@ -5,6 +5,7 @@ import ProjectHeader from './ProjectHeader';
 import SkillGapHighlight from './SkillGapHighlight';
 import OpenRolesList from './OpenRolesList';
 import TeamGrid from './TeamGrid';
+import ProjectAnalysisPanel from './ProjectAnalysisPanel';
 import { API_BASE_URL } from '../../config/api';
 
 const toPositiveIntegerOrNull = (value) => {
@@ -63,6 +64,16 @@ const ProjectDetails = () => {
     const [roadmapSaving, setRoadmapSaving] = useState(false);
     const [roadmapError, setRoadmapError] = useState('');
     const [roadmapSuccess, setRoadmapSuccess] = useState('');
+    const [analysis, setAnalysis] = useState(null);
+    const [analyzingProject, setAnalyzingProject] = useState(false);
+    const [openingPositions, setOpeningPositions] = useState(false);
+    const [analysisError, setAnalysisError] = useState('');
+    const [analysisNotice, setAnalysisNotice] = useState('');
+    const [invitingUserMap, setInvitingUserMap] = useState({});
+    const [pendingApplications, setPendingApplications] = useState([]);
+    const [applicationsLoading, setApplicationsLoading] = useState(false);
+    const [applicationsError, setApplicationsError] = useState('');
+    const [applicationActionId, setApplicationActionId] = useState('');
     const roadmap = Array.isArray(project?.roadmap) ? project.roadmap : [];
     const canEditRoadmap = Boolean(project?.isOwner || project?.isMember);
 
@@ -84,7 +95,13 @@ const ProjectDetails = () => {
                     throw new Error(data.error || 'Failed to fetch project');
                 }
 
-                setProject(data.project || null);
+                const fetchedProject = data.project || null;
+                setProject(fetchedProject);
+                setAnalysis(
+                    fetchedProject?.isOwner && fetchedProject?.latestAnalysis
+                        ? fetchedProject.latestAnalysis
+                        : null
+                );
             } catch (fetchError) {
                 setError(fetchError.message || 'Failed to fetch project');
             } finally {
@@ -107,6 +124,44 @@ const ProjectDetails = () => {
         const incomingRoadmap = Array.isArray(project?.roadmap) ? project.roadmap : [];
         setRoadmapDraft(incomingRoadmap.map((phase, index) => toDraftRoadmapPhase(phase, index)));
     }, [project]);
+
+    useEffect(() => {
+        const fetchPendingApplications = async () => {
+            if (!project?.isOwner || !id) {
+                setPendingApplications([]);
+                return;
+            }
+
+            setApplicationsError('');
+            setApplicationsLoading(true);
+            try {
+                const token = localStorage.getItem('authToken');
+                const response = await fetch(`${API_BASE_URL}/api/notification`, {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to fetch applications');
+                }
+
+                const filtered = (Array.isArray(data.notifications) ? data.notifications : []).filter(
+                    (notification) =>
+                        notification?.rawType === 'project_application' &&
+                        notification?.status === 'pending' &&
+                        String(notification?.project?.id || '') === String(id)
+                );
+                setPendingApplications(filtered);
+            } catch (fetchError) {
+                setApplicationsError(fetchError.message || 'Failed to fetch applications');
+            } finally {
+                setApplicationsLoading(false);
+            }
+        };
+
+        fetchPendingApplications();
+    }, [id, project?.isOwner]);
 
     const handleInvite = async (event) => {
         event.preventDefault();
@@ -380,6 +435,168 @@ const ProjectDetails = () => {
         roadmapSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
     };
 
+    const handleApplicationDecision = async (notificationId, action) => {
+        const normalizedId = String(notificationId || '').trim();
+        if (!normalizedId) return;
+        if (!['accept', 'reject'].includes(action)) return;
+
+        setApplicationsError('');
+        setApplicationActionId(normalizedId);
+        try {
+            const token = localStorage.getItem('authToken');
+            const response = await fetch(`${API_BASE_URL}/api/notification/${normalizedId}/${action}`, {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data.error || `Failed to ${action} application`);
+            }
+
+            setPendingApplications((prev) =>
+                prev.filter((notification) => notification.id !== normalizedId)
+            );
+
+            if (action === 'accept') {
+                const projectResponse = await fetch(`${API_BASE_URL}/api/project/${id}`, {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                });
+                const projectData = await projectResponse.json().catch(() => ({}));
+                if (projectResponse.ok && projectData?.project) {
+                    setProject(projectData.project);
+                }
+            }
+        } catch (actionError) {
+            setApplicationsError(actionError.message || 'Failed to update application');
+        } finally {
+            setApplicationActionId('');
+        }
+    };
+
+    const handleJumpToAnalysis = () => {
+        const analysisSection = document.getElementById('project-analysis');
+        if (!analysisSection) return;
+        analysisSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+
+    const handleAnalyzeProject = async () => {
+        setAnalysisError('');
+        setAnalysisNotice('');
+        setAnalyzingProject(true);
+
+        try {
+            const token = localStorage.getItem('authToken');
+            const response = await fetch(`${API_BASE_URL}/api/project/${id}/analyze`, {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to analyze project');
+            }
+
+            if (data?.project) {
+                setProject(data.project);
+            }
+            setAnalysis(data?.analysis || null);
+            setAnalysisNotice(data?.message || 'Project analysis completed.');
+            handleJumpToAnalysis();
+        } catch (actionError) {
+            setAnalysisError(actionError.message || 'Failed to analyze project');
+        } finally {
+            setAnalyzingProject(false);
+        }
+    };
+
+    const handleInviteUserById = async (userId, roleTitle = 'Contributor') => {
+        const normalizedUserId = String(userId || '').trim();
+        if (!normalizedUserId) return;
+
+        setInvitingUserMap((prev) => ({
+            ...prev,
+            [normalizedUserId]: {
+                loading: true,
+                error: '',
+                success: '',
+            },
+        }));
+
+        try {
+            const token = localStorage.getItem('authToken');
+            const response = await fetch(`${API_BASE_URL}/api/project/${id}/invite`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    userId: normalizedUserId,
+                    role: String(roleTitle || 'Contributor').trim() || 'Contributor',
+                }),
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to send invite');
+            }
+
+            setInvitingUserMap((prev) => ({
+                ...prev,
+                [normalizedUserId]: {
+                    loading: false,
+                    error: '',
+                    success: 'Invite sent',
+                },
+            }));
+            setAnalysisNotice('Invitation sent successfully.');
+        } catch (actionError) {
+            setInvitingUserMap((prev) => ({
+                ...prev,
+                [normalizedUserId]: {
+                    loading: false,
+                    error: actionError.message || 'Failed to invite',
+                    success: '',
+                },
+            }));
+        }
+    };
+
+    const handleOpenPositionsFromAnalysis = async () => {
+        setAnalysisError('');
+        setAnalysisNotice('');
+        setOpeningPositions(true);
+        try {
+            const token = localStorage.getItem('authToken');
+            const response = await fetch(`${API_BASE_URL}/api/project/${id}/open-positions`, {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to open suggested positions');
+            }
+
+            if (data?.project) {
+                setProject(data.project);
+                if (data.project?.isOwner && data.project?.latestAnalysis) {
+                    setAnalysis(data.project.latestAnalysis);
+                }
+            }
+            setAnalysisNotice(data.message || 'Suggested positions opened successfully.');
+        } catch (actionError) {
+            setAnalysisError(actionError.message || 'Failed to open suggested positions');
+        } finally {
+            setOpeningPositions(false);
+        }
+    };
+
 
 
     if (loading) {
@@ -411,7 +628,35 @@ const ProjectDetails = () => {
             <div className="grid lg:grid-cols-3 gap-8">
                 {/* Left Column - Main Content */}
                 <div className="lg:col-span-2">
-                    <SkillGapHighlight missingSkills={project.missingSkills} />
+                    {analysisError ? (
+                        <div className="mb-4 text-xs text-red-600 bg-red-50 border border-red-100 rounded-md p-3">
+                            {analysisError}
+                        </div>
+                    ) : null}
+
+                    <SkillGapHighlight
+                        missingSkills={
+                            Array.isArray(analysis?.projectSkillGap) && analysis.projectSkillGap.length > 0
+                                ? analysis.projectSkillGap
+                                : project.missingSkills
+                        }
+                        onReviewGaps={handleAnalyzeProject}
+                        reviewing={analyzingProject}
+                    />
+
+                    <div id="project-analysis">
+                    <ProjectAnalysisPanel
+                        analysis={analysis}
+                        analyzing={analyzingProject}
+                        onAnalyze={handleAnalyzeProject}
+                        onOpenPositions={handleOpenPositionsFromAnalysis}
+                        openingPositions={openingPositions}
+                        isOwner={Boolean(project?.isOwner)}
+                        invitingByUserId={invitingUserMap}
+                        onInviteUser={handleInviteUserById}
+                        notifyMessage={analysisNotice}
+                    />
+                    </div>
 
                     <div className="bg-white rounded-2xl p-8 shadow-sm border border-gray-100 mb-6">
                         <h3 className="text-xl font-bold text-gray-900 mb-4">About the Project</h3>
@@ -729,6 +974,70 @@ const ProjectDetails = () => {
                             </div>
                         )}
                     </div>
+
+                    {project.isOwner ? (
+                        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+                            <h3 className="font-bold text-gray-900 mb-4">Role Applications</h3>
+
+                            {applicationsError ? (
+                                <div className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-md p-2 mb-3">
+                                    {applicationsError}
+                                </div>
+                            ) : null}
+
+                            {applicationsLoading ? (
+                                <div className="text-sm text-gray-500">Loading applications...</div>
+                            ) : pendingApplications.length === 0 ? (
+                                <div className="text-xs text-gray-500 bg-gray-50 border border-gray-100 rounded-md p-3">
+                                    No pending applications for this project.
+                                </div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {pendingApplications.map((application) => (
+                                        <div
+                                            key={application.id}
+                                            className="rounded-lg border border-gray-100 p-3 bg-gray-50"
+                                        >
+                                            <p className="text-sm font-semibold text-gray-900">
+                                                {application.sender?.name || 'Applicant'}
+                                            </p>
+                                            <p className="text-xs text-gray-600 mt-1">
+                                                Applied for: {application.roleTitle || 'Contributor'}
+                                            </p>
+                                            <p className="text-xs text-gray-500 mt-1">
+                                                {application.message || 'New application received'}
+                                            </p>
+
+                                            <div className="mt-3 flex items-center gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        handleApplicationDecision(application.id, 'accept')
+                                                    }
+                                                    disabled={applicationActionId === application.id}
+                                                    className="px-3 py-1.5 text-xs font-semibold rounded-md bg-green-600 text-white hover:bg-green-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                                                >
+                                                    {applicationActionId === application.id
+                                                        ? 'Updating...'
+                                                        : 'Accept'}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        handleApplicationDecision(application.id, 'reject')
+                                                    }
+                                                    disabled={applicationActionId === application.id}
+                                                    className="px-3 py-1.5 text-xs font-semibold rounded-md bg-white text-gray-700 border border-gray-200 hover:bg-gray-100 disabled:opacity-60 disabled:cursor-not-allowed"
+                                                >
+                                                    Reject
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    ) : null}
 
                     {project.isOwner ? (
                         <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
