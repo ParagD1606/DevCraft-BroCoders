@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import ChatSidebar from './ChatSidebar';
 import ChatWindow from './ChatWindow';
@@ -124,7 +124,7 @@ const ChatLayout = () => {
         }
     };
 
-    const accessProjectChat = async (projectId) => {
+    const accessProjectChat = useCallback(async (projectId) => {
         if (!projectId) return;
         try {
             setLoading(true);
@@ -153,14 +153,14 @@ const ChatLayout = () => {
             nextParams.delete('projectId');
             setSearchParams(nextParams, { replace: true });
         }
-    };
+    }, [searchParams, setSearchParams]);
 
     useEffect(() => {
         if (!user || !projectIdFromQuery) return;
         accessProjectChat(projectIdFromQuery);
-    }, [user, projectIdFromQuery]);
+    }, [user, projectIdFromQuery, accessProjectChat]);
 
-    const fetchMessages = async () => {
+    const fetchMessages = useCallback(async () => {
         if (!selectedChat) return;
 
         try {
@@ -180,12 +180,12 @@ const ChatLayout = () => {
         } catch (error) {
             console.error("Failed to load the messages", error);
         }
-    };
+    }, [selectedChat]);
 
     useEffect(() => {
         fetchMessages();
         selectedChatRef.current = selectedChat;
-    }, [selectedChat]);
+    }, [fetchMessages, selectedChat]);
 
     const sendMessage = async (content) => {
         try {
@@ -222,23 +222,26 @@ const ChatLayout = () => {
     };
 
     return (
-        <div className="flex h-[calc(100vh-8rem)] bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            <ChatSidebar
-                conversations={chats}
-                activeId={selectedChat?._id}
-                onSelect={(chat) => setSelectedChat(chat)}
-                searchQuery={searchQuery}
-                setSearchQuery={setSearchQuery}
-                user={user}
-                accessChat={accessChat}
-            />
-            <ChatWindow
-                activeConversation={selectedChat}
-                currentUser={user}
-                messages={messages}
-                onSend={sendMessage}
-                connectionStatus={socketConnected ? 'connected' : 'connecting'}
-            />
+        <div className="h-[calc(100vh-8rem)] rounded-3xl overflow-hidden border border-slate-200/80 shadow-[0_18px_60px_-25px_rgba(15,23,42,0.55)] bg-white">
+            <div className="h-full flex bg-gradient-to-br from-slate-900/5 via-white to-cyan-50/40">
+                <ChatSidebar
+                    conversations={chats}
+                    activeId={selectedChat?._id}
+                    onSelect={(chat) => setSelectedChat(chat)}
+                    searchQuery={searchQuery}
+                    setSearchQuery={setSearchQuery}
+                    user={user}
+                    accessChat={accessChat}
+                    isBusy={loading}
+                />
+                <ChatWindow
+                    activeConversation={selectedChat}
+                    currentUser={user}
+                    messages={messages}
+                    onSend={sendMessage}
+                    connectionStatus={socketConnected ? 'connected' : 'connecting'}
+                />
+            </div>
         </div>
     );
 };
