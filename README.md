@@ -1,53 +1,112 @@
-﻿# DevCraft-BroCoders
+# DevCraft-BroCoders
 
-Collaborative developer platform to create projects, find teammates, connect/follow users, manage project roadmaps, and chat in real-time project groups.
+Collaborative developer platform to create projects, recruit teammates, run AI-assisted project planning, and collaborate in real-time.
 
-## Features
-- User auth with email/password + Google/GitHub OAuth
-- Onboarding + profile system (skills, interests, GitHub enrichment)
-- Find Teammates with semantic matching and connection requests
-- Follow/star style credibility indicators
-- Project creation, open roles, applications, invites, and progress tracking
-- Collaborative project roadmap editor (owner + members)
-- Source code repository links per project
-- Project group chats and direct chats via Socket.IO
-- Notification center (project invites/applications, connection events)
-- Virtual CTO planning pipeline (roadmap, roles, recommendations)
+## Core Features
+- Auth: Email/password + Google/GitHub OAuth
+- Onboarding + profile: skills, interests, availability, GitHub enrichment
+- Find Teammates:
+  - classic search + filters
+  - semantic (vector) search with keyword fallback
+  - connect + follow actions
+- Project lifecycle:
+  - create project, post open roles, apply/invite, accept/reject flows
+  - roadmap editing (owner + members), progress tracking
+  - project/team chats via Socket.IO
+- Virtual CTO:
+  - generates project blueprint (title, stack, roles, roadmap)
+  - stream endpoint for progressive responses
+  - candidate recommendations + teammate pairing suggestions
+- AI Project Analysis:
+  - owner-triggered analysis on Project Details
+  - auto role suggestions + skill-gap detection
+  - persisted `latestAnalysis` on project (owner-only visibility)
+  - one-click "open suggested positions" from analysis
+- Profile project recommendations:
+  - recommends open roles based on user skills
+  - direct apply flow from profile cards
+- Unified candidate details popup:
+  - same detailed modal across Find Teammates, Project Analysis, Virtual CTO chat, Dashboard suggestions, and team cards
+
+## Agent Working
+### Virtual CTO Agent Flow
+1. User submits an idea in Create Project or Dashboard widget.
+2. Backend creates a base plan (title, description, stack, roles, roadmap).
+3. Gemini (`gemini-2.5-flash-lite`) enhances plan quality and structure.
+4. Candidate matching runs using:
+   - semantic embeddings/vector similarity
+   - skill overlap scoring
+   - keyword fallback when needed
+5. Agent returns:
+   - technical plan + roadmap
+   - required skills + role cards
+   - candidate recommendations
+   - teammate pair suggestions
+6. Result can stream in real-time via `POST /api/project/virtual-cto/stream`.
+7. Plan can be converted into a real project and invites can be sent immediately.
+
+### Project Analysis Agent Flow
+1. Owner runs `Analyze Project` from Project Details.
+2. Agent uses project context:
+   - current roles/openings
+   - team composition
+   - project description/category/commitment
+3. It detects skill gaps and role shortages, suggests candidates, and computes role-candidate matches.
+4. Analysis is persisted as `latestAnalysis` on the project.
+5. Owner can re-run analysis anytime; latest run overwrites prior snapshot.
+6. Owner can click `Open Suggested Positions` to publish analyzed openings.
 
 ## Tech Stack
-- Frontend: React + Vite + Tailwind + Framer Motion
-- Backend: Node.js + Express + MongoDB (Mongoose)
-- Realtime: Socket.IO
-- Auth: JWT + Passport OAuth strategies
+- Frontend
+  - React 19
+  - Vite 7
+  - Tailwind CSS
+  - Framer Motion
+  - React Router DOM
+  - Socket.IO Client
+- Backend
+  - Node.js + Express
+  - Mongoose (MongoDB)
+  - Socket.IO Server
+  - Passport (Google/GitHub OAuth strategies)
+  - JWT auth
+- AI + Matching
+  - Gemini API (`gemini-2.5-flash-lite`) for Virtual CTO enhancement
+  - Local embedding generation and vector similarity search
+  - Hybrid ranking: semantic + skills + keyword fallback
+- Data/Infrastructure
+  - MongoDB for users, projects, notifications, chats, messages
+  - In-memory cache for Virtual CTO package responses
 
 ## Repository Structure
 ```text
 .
-|- backend/    # Express API + Socket.IO + MongoDB models/routes
+|- backend/    # Express API, routes/models, Socket.IO server
 |- frontend/   # React Vite client
 |- README.md
 ```
 
 ## Prerequisites
-- Node.js 18+ (recommended: latest LTS)
+- Node.js 18+ (latest LTS recommended)
 - npm 9+
-- MongoDB running locally or via a hosted URI
+- MongoDB (local or hosted)
 
 ## Local Setup
+
 ### 1) Backend
 ```bash
 cd backend
 npm install
 ```
 
-Create `backend/.env` (you can start from `backend/.env.example`):
+Create `backend/.env` (copy from `backend/.env.example` and replace values):
 ```env
 PORT=5000
 NODE_ENV=development
 CORS_ORIGIN=http://localhost:5173
 FRONTEND_ORIGIN=http://localhost:5173
 MONGO_URI=mongodb://127.0.0.1:27017/devcraft
-JWT_SECRET=replace_with_your_own_secret
+JWT_SECRET=replace_with_a_strong_secret
 JWT_EXPIRES_IN=7d
 
 GITHUB_CLIENT_ID=
@@ -61,7 +120,7 @@ GEMINI_TIMEOUT_MS=12000
 VIRTUAL_CTO_CACHE_TTL_MS=300000
 ```
 
-Run backend:
+Run:
 ```bash
 npm run dev
 ```
@@ -72,47 +131,58 @@ cd frontend
 npm install
 ```
 
-Optional `frontend/.env` (if backend is not default `http://localhost:5000`):
+Optional `frontend/.env`:
 ```env
 VITE_API_BASE_URL=http://localhost:5000
 VITE_WS_BASE_URL=ws://localhost:5000
 ```
 
-Run frontend:
+Run:
 ```bash
 npm run dev
 ```
 
-App URLs:
+## Local URLs
 - Frontend: `http://localhost:5173`
-- Backend API: `http://localhost:5000/api`
-- Health check: `http://localhost:5000/health`
+- Backend API base: `http://localhost:5000/api`
+- Health: `http://localhost:5000/health`
 
 ## Scripts
+
 ### Backend (`backend/package.json`)
-- `npm run dev` - start with nodemon
-- `npm start` - start with node
-- `npm run check` - syntax check
-- `npm run migrate:embeddings` - embeddings migration helper
+- `npm run dev` - run with nodemon
+- `npm start` - run with node
+- `npm run check` - syntax check (`node --check`)
+- `npm run migrate:embeddings` - embeddings migration script
 
 ### Frontend (`frontend/package.json`)
-- `npm run dev` - Vite dev server
+- `npm run dev` - Vite dev
 - `npm run build` - production build
 - `npm run lint` - ESLint
-- `npm run preview` - preview production build
+- `npm run preview` - preview build
 
-## API Modules (high level)
-- `/api/auth` - signup/login/OAuth
-- `/api/user` - profile, search, social graph actions
-- `/api/project` - projects, roles, roadmap, analysis
-- `/api/chat` - chat creation/access (direct + project)
-- `/api/message` - message fetch/send
-- `/api/notification` - notifications + invite/request actions
+## API Modules (High Level)
+- `/api/auth` - authentication + OAuth
+- `/api/user` - profile, teammates, semantic search, follow/connect
+- `/api/project` - projects, roles, applications, invites, analysis, Virtual CTO
+- `/api/chat` - chat creation/access
+- `/api/message` - chat messages
+- `/api/notification` - invites/applications/connection actions
+
+## Notable Project Endpoints
+- `POST /api/project/virtual-cto/plan`
+- `POST /api/project/virtual-cto/stream` (NDJSON stream)
+- `POST /api/project/:id/analyze` (owner only; saves `latestAnalysis`)
+- `POST /api/project/:id/open-positions` (owner only; publish analyzed roles)
+- `POST /api/project/:id/apply`
+- `POST /api/project/:id/invite`
 
 ## Realtime Events (Socket.IO)
 - Client emits: `setup`, `join chat`, `new message`, `typing`, `stop typing`
 - Server emits: `connected`, `message received`
 
-## Notes
-- OAuth callback URLs in backend are currently configured for localhost (`http://localhost:5000/...`). Update them when deploying.
-- Never commit real secrets in `.env` files.
+## Security/Deployment Notes
+- Replace all secrets before running outside local dev.
+- Rotate any API key that was exposed accidentally.
+- Update OAuth callback URLs when deploying (currently local defaults).
+- Do not commit `.env` secrets.
