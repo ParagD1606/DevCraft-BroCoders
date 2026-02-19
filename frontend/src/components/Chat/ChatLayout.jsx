@@ -1,12 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import ChatSidebar from './ChatSidebar';
 import ChatWindow from './ChatWindow';
 import io from 'socket.io-client';
+import { API_BASE_URL } from '../../config/api';
 
-const ENDPOINT = "http://localhost:5000";
+const ENDPOINT = API_BASE_URL;
 var socket;
 
 const ChatLayout = () => {
+    const [searchParams, setSearchParams] = useSearchParams();
     const selectedChatRef = useRef(null);
     const [selectedChat, setSelectedChat] = useState();
     const [chats, setChats] = useState([]);
@@ -15,6 +18,7 @@ const ChatLayout = () => {
     const [searchQuery, setSearchQuery] = useState("");
     const [socketConnected, setSocketConnected] = useState(false);
     const [loading, setLoading] = useState(false);
+    const projectIdFromQuery = searchParams.get('projectId');
 
     useEffect(() => {
         const userInfo = JSON.parse(localStorage.getItem("authUser"));
@@ -76,7 +80,7 @@ const ChatLayout = () => {
         try {
             const token = localStorage.getItem("authToken");
 
-            const response = await fetch("http://localhost:5000/api/chat", {
+            const response = await fetch(`${API_BASE_URL}/api/chat`, {
                 method: "GET",
                 headers: {
                     Authorization: `Bearer ${token}`,
@@ -98,7 +102,7 @@ const ChatLayout = () => {
             setLoading(true);
             const token = localStorage.getItem("authToken");
 
-            const response = await fetch("http://localhost:5000/api/chat", {
+            const response = await fetch(`${API_BASE_URL}/api/chat`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -108,7 +112,9 @@ const ChatLayout = () => {
             });
             const data = await response.json();
 
-            if (!chats.find((c) => c._id === data._id)) setChats([data, ...chats]);
+            setChats((prev) => (
+                prev.some((chat) => chat._id === data._id) ? prev : [data, ...prev]
+            ));
             setSelectedChat(data);
             setLoading(false);
             setSearchQuery(""); // Clear search after selection
@@ -118,13 +124,49 @@ const ChatLayout = () => {
         }
     };
 
+    const accessProjectChat = async (projectId) => {
+        if (!projectId) return;
+        try {
+            setLoading(true);
+            const token = localStorage.getItem("authToken");
+            const response = await fetch(`${API_BASE_URL}/api/chat/project/${projectId}`, {
+                method: "GET",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.error || "Failed to open project chat");
+            }
+
+            setChats((prev) => (
+                prev.some((chat) => chat._id === data._id) ? prev : [data, ...prev]
+            ));
+            setSelectedChat(data);
+            setSearchQuery("");
+        } catch (error) {
+            console.error("Error opening project chat", error);
+        } finally {
+            setLoading(false);
+            const nextParams = new URLSearchParams(searchParams);
+            nextParams.delete('projectId');
+            setSearchParams(nextParams, { replace: true });
+        }
+    };
+
+    useEffect(() => {
+        if (!user || !projectIdFromQuery) return;
+        accessProjectChat(projectIdFromQuery);
+    }, [user, projectIdFromQuery]);
+
     const fetchMessages = async () => {
         if (!selectedChat) return;
 
         try {
             const token = localStorage.getItem("authToken");
 
-            const response = await fetch(`http://localhost:5000/api/message/${selectedChat._id}`, {
+            const response = await fetch(`${API_BASE_URL}/api/message/${selectedChat._id}`, {
                 method: "GET",
                 headers: {
                     Authorization: `Bearer ${token}`,
@@ -149,7 +191,7 @@ const ChatLayout = () => {
         try {
             const token = localStorage.getItem("authToken");
 
-            const response = await fetch("http://localhost:5000/api/message", {
+            const response = await fetch(`${API_BASE_URL}/api/message`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",

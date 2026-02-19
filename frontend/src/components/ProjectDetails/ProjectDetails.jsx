@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Loader2, SlidersHorizontal, UserPlus } from 'lucide-react';
 import ProjectHeader from './ProjectHeader';
 import SkillGapHighlight from './SkillGapHighlight';
@@ -8,6 +8,7 @@ import TeamGrid from './TeamGrid';
 import { API_BASE_URL } from '../../config/api';
 
 const ProjectDetails = () => {
+    const navigate = useNavigate();
     const { id } = useParams();
     const [project, setProject] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -222,6 +223,8 @@ const ProjectDetails = () => {
         }
     };
 
+
+
     if (loading) {
         return (
             <div className="max-w-6xl xl:max-w-7xl 2xl:max-w-screen-2xl mx-auto min-h-[40vh] flex items-center justify-center">
@@ -246,6 +249,7 @@ const ProjectDetails = () => {
     return (
         <div className="max-w-6xl xl:max-w-7xl 2xl:max-w-screen-2xl mx-auto space-y-6">
             <ProjectHeader project={project} />
+
 
             <div className="grid lg:grid-cols-3 gap-8">
                 {/* Left Column - Main Content */}

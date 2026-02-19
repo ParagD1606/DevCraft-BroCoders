@@ -195,6 +195,10 @@ const TeammateDetailsModal = ({ user, onClose }) => {
             onboardingCompleted: Boolean(activeUser.onboardingCompleted),
             githubProfileReadme: activeUser.githubProfileReadme || null,
             githubSummaryCache: activeUser.githubSummaryCache || null,
+            followerCount: Number(activeUser.followerCount) || 0,
+            followingCount: Number(activeUser.followingCount) || 0,
+            connectedCount: Number(activeUser.connectedCount) || 0,
+            starCount: Number(activeUser.starCount ?? activeUser.followerCount) || 0,
             createdAt: activeUser.createdAt,
         }
         : null;
@@ -310,6 +314,20 @@ const TeammateDetailsModal = ({ user, onClose }) => {
                             <p className="text-sm text-gray-500">
                                 Joined {toDisplayDate(safeUser.createdAt)}
                             </p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                                <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                                    Stars: {safeUser.starCount}
+                                </span>
+                                <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                                    Followers: {safeUser.followerCount}
+                                </span>
+                                <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                    Following: {safeUser.followingCount}
+                                </span>
+                                <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-green-50 text-green-700 border border-green-200">
+                                    Connected: {safeUser.connectedCount}
+                                </span>
+                            </div>
                         </div>
                     </div>
 

@@ -6,6 +6,8 @@ const { protect } = require('../middleware/authMiddleware');
 const { generateVirtualCtoPlan, enhancePlanWithLlm } = require('../utils/virtualCtoUtils');
 const { generateEmbedding, EMBEDDING_DIMENSION } = require('../utils/embeddingUtils');
 const { searchLocalVectors } = require('../utils/vectorUtils');
+const { generateVirtualCtoPlan } = require('../utils/virtualCtoUtils');
+const { ensureProjectGroupChat } = require('../utils/projectChatUtils');
 
 const router = express.Router();
 const VIRTUAL_CTO_CACHE_TTL_MS = Number(process.env.VIRTUAL_CTO_CACHE_TTL_MS) > 0
@@ -675,6 +677,12 @@ router.post('/', protect, async (req, res) => {
       progress: 0,
       teamSize: 1,
     });
+
+    try {
+      await ensureProjectGroupChat(project);
+    } catch (chatError) {
+      console.error('Ensure project group chat error:', chatError);
+    }
 
     const ownerName = req.user.name || req.user.email || 'Someone';
     try {

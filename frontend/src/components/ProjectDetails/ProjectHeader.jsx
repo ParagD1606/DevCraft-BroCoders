@@ -1,7 +1,9 @@
 import React from 'react';
 import { BadgeCheck, Calendar, Globe, MessageCircle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const ProjectHeader = ({ project }) => {
+    const navigate = useNavigate();
     const projectStatus = project.status || 'In Progress';
 
     return (
@@ -17,7 +19,9 @@ const ProjectHeader = ({ project }) => {
                     </div>
                     <p className="text-lg text-gray-600 max-w-2xl">{project.shortDescription || project.fullDescription}</p>
                 </div>
-                <button className="flex items-center px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors font-medium">
+                <button
+                    onClick={() => navigate(`/chat?projectId=${encodeURIComponent(project.id)}`)}
+                    className="flex items-center px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors font-medium">
                     <MessageCircle size={18} className="mr-2" />
                     Discuss Project
                 </button>
