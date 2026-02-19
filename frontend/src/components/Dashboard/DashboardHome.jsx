@@ -3,12 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Folder, Users, Star, ArrowRight, AlertCircle, TrendingUp, Loader2 } from 'lucide-react';
 import { API_BASE_URL } from '../../config/api';
+import TeammateDetailsModal from '../FindTeammates/TeammateDetailsModal';
 
 const DashboardHome = () => {
     const navigate = useNavigate();
     const [dashboard, setDashboard] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [selectedTeammate, setSelectedTeammate] = useState(null);
 
     const fetchDashboard = async () => {
         setLoading(true);
@@ -257,7 +259,13 @@ const DashboardHome = () => {
                                         animate={{ opacity: 1, x: 0 }}
                                         transition={{ delay: 0.2 + index * 0.1 }}
                                         onClick={() =>
-                                            navigate(`/find-teammates?search=${encodeURIComponent(match.name || '')}`)
+                                            setSelectedTeammate({
+                                                _id: match.id,
+                                                id: match.id,
+                                                name: match.name,
+                                                role: match.role,
+                                                skills: Array.isArray(match.skills) ? match.skills : [],
+                                            })
                                         }
                                         className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer"
                                     >
@@ -282,6 +290,10 @@ const DashboardHome = () => {
                     </section>
                 </div>
             </div>
+            <TeammateDetailsModal
+                user={selectedTeammate}
+                onClose={() => setSelectedTeammate(null)}
+            />
         </div>
     );
 };
