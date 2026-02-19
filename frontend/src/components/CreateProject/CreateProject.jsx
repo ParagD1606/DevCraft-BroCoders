@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import ProjectOverview from './ProjectOverview';
 import OpenRoles from './OpenRoles';
 import ProjectTimeline from './ProjectTimeline';
 import { CheckCircle, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { API_BASE_URL } from '../../config/api';
+import VirtualCTOChatWidget from './VirtualCTOChatWidget';
 
 const CreateProject = () => {
     const navigate = useNavigate();
@@ -25,6 +26,107 @@ const CreateProject = () => {
 
     const updateFormData = (key, value) => {
         setFormData(prev => ({ ...prev, [key]: value }));
+    };
+
+    const isFormDirty = (currentFormData) => {
+        return Boolean(
+            String(currentFormData?.title || '').trim() ||
+            String(currentFormData?.description || '').trim() ||
+            String(currentFormData?.category || '').trim() ||
+            String(currentFormData?.startDate || '').trim() ||
+            String(currentFormData?.endDate || '').trim() ||
+            String(currentFormData?.commitment || '').trim() ||
+            (Array.isArray(currentFormData?.roles) && currentFormData.roles.length > 0)
+        );
+    };
+
+    const mapBlueprintRolesToForm = (roles = []) => {
+        return (Array.isArray(roles) ? roles : []).map((role, index) => {
+            const normalizedSkills = Array.isArray(role?.skills)
+                ? role.skills.map((skill) => String(skill || '').trim()).filter(Boolean).join(', ')
+                : String(role?.skills || '');
+
+            return {
+                id: Date.now() + index,
+                title: String(role?.title || '').trim(),
+                skills: normalizedSkills,
+                spots: Number(role?.spots) > 0 ? Number(role.spots) : 1,
+                durationHours: Number(role?.durationHours) > 0 ? Number(role.durationHours) : '',
+            };
+        }).filter((role) => role.title && role.skills);
+    };
+
+    const applyBlueprintToForm = (plan) => {
+        const hasExistingData = isFormDirty(formData);
+        if (hasExistingData) {
+            const shouldOverwrite = window.confirm(
+                "Warning: This will overwrite what you've already typed. Are you sure?"
+            );
+            if (!shouldOverwrite) {
+                return { applied: false, reason: 'overwrite_cancelled' };
+            }
+        }
+
+        setFormData({
+            title: String(plan?.title || ''),
+            description: String(plan?.description || ''),
+            category: String(plan?.category || ''),
+            roles: mapBlueprintRolesToForm(plan?.roles || []),
+            startDate: String(plan?.startDate || ''),
+            endDate: String(plan?.endDate || ''),
+            commitment: String(plan?.commitment || ''),
+        });
+
+        return { applied: true };
+    };
+
+    const architectProjectIdea = async (idea) => {
+        const token = localStorage.getItem('authToken');
+        if (!token) {
+            throw new Error('You need to be logged in to use Virtual CTO');
+        }
+
+        const planResponse = await fetch(`${API_BASE_URL}/api/project/virtual-cto/plan`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ idea }),
+        });
+
+        const planData = await planResponse.json();
+        if (!planResponse.ok) {
+            throw new Error(planData.error || 'Failed to generate project blueprint');
+        }
+
+        const plan = planData.plan || {};
+        const applyResult = applyBlueprintToForm(plan);
+
+        let teammates = [];
+        try {
+            const teammateResponse = await fetch(`${API_BASE_URL}/api/user/search-semantic`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({ queryText: idea }),
+            });
+
+            const teammateData = await teammateResponse.json();
+            if (teammateResponse.ok) {
+                teammates = Array.isArray(teammateData.results) ? teammateData.results.slice(0, 6) : [];
+            }
+        } catch (_searchError) {
+            teammates = [];
+        }
+
+        return {
+            plan,
+            teammates,
+            ...applyResult,
+        };
     };
 
     const handleSubmit = async (e) => {
@@ -92,46 +194,50 @@ const CreateProject = () => {
     }
 
     return (
-        <div className="max-w-4xl mx-auto">
-            <div className="mb-8">
-                <h1 className="text-3xl font-bold text-gray-900">Create New Project</h1>
-                <p className="text-gray-500 mt-2">Share your idea and find the perfect team to build it.</p>
+        <>
+            <div className="max-w-4xl mx-auto">
+                <div className="mb-8">
+                    <h1 className="text-3xl font-bold text-gray-900">Create New Project</h1>
+                    <p className="text-gray-500 mt-2">Share your idea and find the perfect team to build it.</p>
+                </div>
+
+                <form onSubmit={handleSubmit} className="space-y-6">
+                    <ProjectOverview formData={formData} updateFormData={updateFormData} />
+
+                    <div className="grid md:grid-cols-2 gap-6">
+                        <OpenRoles formData={formData} updateFormData={updateFormData} />
+                        <ProjectTimeline formData={formData} updateFormData={updateFormData} />
+                    </div>
+
+                    <div className="flex justify-end pt-6">
+                        {error ? <p className="text-sm text-red-600 mr-auto">{error}</p> : null}
+                        <button
+                            type="button"
+                            onClick={() => navigate('/projects')}
+                            className="px-6 py-3 text-gray-600 hover:bg-gray-100 rounded-xl transition-colors font-medium mr-4"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={loading || !formData.title || formData.roles.length === 0}
+                            className="flex items-center px-8 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/30 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {loading ? (
+                                <>
+                                    <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                                    Creating...
+                                </>
+                            ) : (
+                                'Launch Project'
+                            )}
+                        </button>
+                    </div>
+                </form>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
-                <ProjectOverview formData={formData} updateFormData={updateFormData} />
-
-                <div className="grid md:grid-cols-2 gap-6">
-                    <OpenRoles formData={formData} updateFormData={updateFormData} />
-                    <ProjectTimeline formData={formData} updateFormData={updateFormData} />
-                </div>
-
-                <div className="flex justify-end pt-6">
-                    {error ? <p className="text-sm text-red-600 mr-auto">{error}</p> : null}
-                    <button
-                        type="button"
-                        onClick={() => navigate('/projects')}
-                        className="px-6 py-3 text-gray-600 hover:bg-gray-100 rounded-xl transition-colors font-medium mr-4"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        type="submit"
-                        disabled={loading || !formData.title || formData.roles.length === 0}
-                        className="flex items-center px-8 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/30 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        {loading ? (
-                            <>
-                                <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                                Creating...
-                            </>
-                        ) : (
-                            'Launch Project'
-                        )}
-                    </button>
-                </div>
-            </form>
-        </div>
+            <VirtualCTOChatWidget onArchitectIdea={architectProjectIdea} />
+        </>
     );
 };
 

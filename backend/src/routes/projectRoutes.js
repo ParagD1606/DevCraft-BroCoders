@@ -3,6 +3,7 @@ const Project = require('../models/Project');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
 const { protect } = require('../middleware/authMiddleware');
+const { generateVirtualCtoPlan } = require('../utils/virtualCtoUtils');
 
 const router = express.Router();
 
@@ -291,6 +292,30 @@ router.post('/', protect, async (req, res) => {
     });
   } catch (error) {
     console.error('Create project error:', error);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// @desc    Generate a project blueprint from a raw idea (Virtual CTO)
+// @route   POST /api/project/virtual-cto/plan
+// @access  Private
+router.post('/virtual-cto/plan', protect, async (req, res) => {
+  try {
+    const rawIdea = String(req.body?.idea || '').trim();
+    if (!rawIdea) {
+      return res.status(400).json({ error: 'idea is required' });
+    }
+
+    if (rawIdea.length < 12) {
+      return res.status(400).json({
+        error: 'Please provide a bit more detail so the Virtual CTO can generate a useful plan',
+      });
+    }
+
+    const plan = generateVirtualCtoPlan(rawIdea);
+    return res.status(200).json({ plan });
+  } catch (error) {
+    console.error('Virtual CTO plan generation error:', error);
     return res.status(500).json({ error: 'Server error' });
   }
 });

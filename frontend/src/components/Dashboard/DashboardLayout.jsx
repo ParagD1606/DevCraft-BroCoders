@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
+import VirtualCTOChatWidget from '../CreateProject/VirtualCTOChatWidget';
+import { API_BASE_URL } from '../../config/api';
 
 const DashboardLayout = ({ children }) => {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const navigate = useNavigate();
+    const location = useLocation();
 
     useEffect(() => {
         const checkOnboarding = () => {
@@ -26,6 +29,51 @@ const DashboardLayout = ({ children }) => {
         checkOnboarding();
     }, [navigate]);
 
+    const architectProjectIdeaFromAnywhere = async (idea) => {
+        const token = localStorage.getItem('authToken');
+        if (!token) {
+            throw new Error('You need to be logged in to use Virtual CTO');
+        }
+
+        const planResponse = await fetch(`${API_BASE_URL}/api/project/virtual-cto/plan`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ idea }),
+        });
+
+        const planData = await planResponse.json();
+        if (!planResponse.ok) {
+            throw new Error(planData.error || 'Failed to generate project blueprint');
+        }
+
+        let teammates = [];
+        try {
+            const teammateResponse = await fetch(`${API_BASE_URL}/api/user/search-semantic`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({ queryText: idea }),
+            });
+            const teammateData = await teammateResponse.json();
+            if (teammateResponse.ok) {
+                teammates = Array.isArray(teammateData.results) ? teammateData.results.slice(0, 6) : [];
+            }
+        } catch (_searchError) {
+            teammates = [];
+        }
+
+        return {
+            plan: planData.plan || null,
+            teammates,
+            applied: false,
+        };
+    };
+
     return (
         <div className="min-h-screen bg-gray-50 flex">
             <Sidebar isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
@@ -37,6 +85,10 @@ const DashboardLayout = ({ children }) => {
                     {children}
                 </main>
             </div>
+
+            {location.pathname !== '/create-project' ? (
+                <VirtualCTOChatWidget onArchitectIdea={architectProjectIdeaFromAnywhere} />
+            ) : null}
         </div>
     );
 };
