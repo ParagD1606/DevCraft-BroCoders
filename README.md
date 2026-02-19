@@ -186,3 +186,6 @@ npm run dev
 - Rotate any API key that was exposed accidentally.
 - Update OAuth callback URLs when deploying (currently local defaults).
 - Do not commit `.env` secrets.
+
+
+<img width="1900" height="910" alt="image" src="https://github.com/user-attachments/assets/ea4ca8de-b65f-41e9-9f3b-6ec435275d79" />
