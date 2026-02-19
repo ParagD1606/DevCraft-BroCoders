@@ -3,9 +3,16 @@ const Project = require('../models/Project');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
 const { protect } = require('../middleware/authMiddleware');
-const { generateVirtualCtoPlan } = require('../utils/virtualCtoUtils');
+const { generateVirtualCtoPlan, enhancePlanWithLlm } = require('../utils/virtualCtoUtils');
+const { generateEmbedding, EMBEDDING_DIMENSION } = require('../utils/embeddingUtils');
+const { searchLocalVectors } = require('../utils/vectorUtils');
 
 const router = express.Router();
+const VIRTUAL_CTO_CACHE_TTL_MS = Number(process.env.VIRTUAL_CTO_CACHE_TTL_MS) > 0
+  ? Number(process.env.VIRTUAL_CTO_CACHE_TTL_MS)
+  : 5 * 60 * 1000;
+const VIRTUAL_CTO_CACHE_MAX_ITEMS = 200;
+const virtualCtoPackageCache = new Map();
 
 function normalizeProjectType(status) {
   if (status === 'Completed') return 'completed';
@@ -52,6 +59,360 @@ function normalizeRoleInput(role) {
     spots,
     durationHours,
   };
+}
+
+function tokenizeText(text) {
+  return String(text || '')
+    .toLowerCase()
+    .split(/[^a-z0-9+#.-]+/g)
+    .map((token) => token.trim())
+    .filter(Boolean);
+}
+
+function buildVirtualCtoCacheKey(userId, rawIdea) {
+  return `${String(userId || '')}::${String(rawIdea || '').trim().toLowerCase()}`;
+}
+
+function cleanupVirtualCtoCache() {
+  const now = Date.now();
+  for (const [key, entry] of virtualCtoPackageCache.entries()) {
+    if (!entry || Number(entry.expiresAt) <= now) {
+      virtualCtoPackageCache.delete(key);
+    }
+  }
+
+  if (virtualCtoPackageCache.size <= VIRTUAL_CTO_CACHE_MAX_ITEMS) return;
+  const keys = [...virtualCtoPackageCache.keys()];
+  const overflow = virtualCtoPackageCache.size - VIRTUAL_CTO_CACHE_MAX_ITEMS;
+  for (let index = 0; index < overflow; index += 1) {
+    virtualCtoPackageCache.delete(keys[index]);
+  }
+}
+
+function readVirtualCtoCache(cacheKey) {
+  cleanupVirtualCtoCache();
+  const cached = virtualCtoPackageCache.get(cacheKey);
+  if (!cached) return null;
+  if (Number(cached.expiresAt) <= Date.now()) {
+    virtualCtoPackageCache.delete(cacheKey);
+    return null;
+  }
+  return cached.value || null;
+}
+
+function writeVirtualCtoCache(cacheKey, payload) {
+  cleanupVirtualCtoCache();
+  virtualCtoPackageCache.set(cacheKey, {
+    value: payload,
+    expiresAt: Date.now() + VIRTUAL_CTO_CACHE_TTL_MS,
+  });
+}
+
+function toLowerSkillSet(skills = []) {
+  return new Set(
+    (Array.isArray(skills) ? skills : [])
+      .map((skill) => String(skill || '').trim().toLowerCase())
+      .filter(Boolean)
+  );
+}
+
+function getPlanRequiredSkills(plan) {
+  return Array.isArray(plan?.requiredSkills)
+    ? plan.requiredSkills.map((skill) => String(skill || '').trim()).filter(Boolean)
+    : [];
+}
+
+function scoreSkillMatch(requiredSkills = [], candidateSkills = []) {
+  const required = toLowerSkillSet(requiredSkills);
+  const candidate = toLowerSkillSet(candidateSkills);
+
+  if (required.size === 0) {
+    return {
+      score: 0,
+      matchedSkills: [],
+      missingSkills: [],
+    };
+  }
+
+  const matchedSkills = [...required].filter((skill) => candidate.has(skill));
+  const missingSkills = [...required].filter((skill) => !candidate.has(skill));
+  const score = matchedSkills.length / required.size;
+
+  return {
+    score: Number(score.toFixed(6)),
+    matchedSkills,
+    missingSkills,
+  };
+}
+
+function buildArchitectQuery(plan, rawIdea) {
+  const roleTitles = (Array.isArray(plan?.roles) ? plan.roles : [])
+    .map((role) => String(role?.title || '').trim())
+    .filter(Boolean)
+    .join(', ');
+
+  const requiredSkills = getPlanRequiredSkills(plan).join(', ');
+  const techStack = (Array.isArray(plan?.techStack) ? plan.techStack : []).join(', ');
+
+  return [
+    `Idea: ${String(rawIdea || '').trim()}`,
+    `Category: ${String(plan?.categoryLabel || plan?.category || '').trim()}`,
+    roleTitles ? `Roles: ${roleTitles}` : '',
+    requiredSkills ? `Required Skills: ${requiredSkills}` : '',
+    techStack ? `Tech Stack: ${techStack}` : '',
+  ]
+    .filter(Boolean)
+    .join('. ');
+}
+
+function mapArchitectCandidate(user, metadata = {}) {
+  return {
+    id: String(user?._id || user?.id || ''),
+    name: user?.name || user?.email || 'Teammate',
+    email: user?.email || '',
+    role: user?.role || 'Member',
+    skills: Array.isArray(user?.skills) ? user.skills : [],
+    semanticScore: Number(metadata.semanticScore || 0),
+    skillMatchScore: Number(metadata.skillMatchScore || 0),
+    matchScore: Number(metadata.matchScore || 0),
+    matchedSkills: Array.isArray(metadata.matchedSkills) ? metadata.matchedSkills : [],
+    missingSkills: Array.isArray(metadata.missingSkills) ? metadata.missingSkills : [],
+    matchSource: metadata.matchSource || 'skill',
+    githubConnected: Boolean(user?.githubId || user?.githubUsername),
+  };
+}
+
+async function findArchitectCandidates({ plan, rawIdea, currentUserId, limit = 6 }) {
+  const normalizedLimit = Math.max(1, Math.min(10, Number(limit) || 6));
+  const requiredSkills = getPlanRequiredSkills(plan);
+  const queryTokens = tokenizeText(`${rawIdea} ${requiredSkills.join(' ')}`);
+  const queryText = buildArchitectQuery(plan, rawIdea);
+
+  const candidates = await User.find({ _id: { $ne: currentUserId } })
+    .select(
+      '+embedding name email role skills bio interests experienceLevel availabilityStatus githubId githubUsername'
+    )
+    .limit(300);
+
+  const indexedCandidates = candidates.filter(
+    (candidate) =>
+      Array.isArray(candidate?.embedding) && candidate.embedding.length === EMBEDDING_DIMENSION
+  );
+
+  let semanticResults = [];
+  if (indexedCandidates.length > 0) {
+    try {
+      const queryVector = await generateEmbedding(queryText);
+      semanticResults = searchLocalVectors(queryVector, indexedCandidates, normalizedLimit * 4);
+    } catch (error) {
+      console.error('Virtual CTO semantic candidate search failed:', error?.message || error);
+      semanticResults = [];
+    }
+  }
+
+  const semanticMap = new Map(
+    semanticResults.map((entry) => [String(entry?._id || entry?.id || ''), entry])
+  );
+
+  const scoredCandidates = candidates
+    .map((candidateDoc) => {
+      const candidate = typeof candidateDoc?.toObject === 'function'
+        ? candidateDoc.toObject()
+        : candidateDoc;
+      const candidateId = String(candidate?._id || candidate?.id || '');
+      const semanticScore = Number(semanticMap.get(candidateId)?.semanticScore || 0);
+      const skillAnalysis = scoreSkillMatch(requiredSkills, candidate?.skills || []);
+      const userText = [
+        candidate?.role,
+        candidate?.bio,
+        ...(Array.isArray(candidate?.skills) ? candidate.skills : []),
+      ]
+        .join(' ')
+        .toLowerCase();
+      const keywordHits = queryTokens.reduce(
+        (count, token) => (userText.includes(token) ? count + 1 : count),
+        0
+      );
+      const keywordScore =
+        queryTokens.length > 0 ? Number((keywordHits / queryTokens.length).toFixed(6)) : 0;
+
+      const matchScore = Number(
+        (semanticScore * 0.55 + skillAnalysis.score * 0.35 + keywordScore * 0.1).toFixed(6)
+      );
+
+      return mapArchitectCandidate(candidate, {
+        semanticScore,
+        skillMatchScore: skillAnalysis.score,
+        matchScore,
+        matchedSkills: skillAnalysis.matchedSkills,
+        missingSkills: skillAnalysis.missingSkills,
+        matchSource: semanticScore > 0 ? 'semantic+skills' : 'skills+keyword',
+      });
+    })
+    .sort((a, b) => b.matchScore - a.matchScore)
+    .slice(0, normalizedLimit);
+
+  return scoredCandidates;
+}
+
+function computeSetIntersectionSize(setA, setB) {
+  let count = 0;
+  for (const value of setA) {
+    if (setB.has(value)) count += 1;
+  }
+  return count;
+}
+
+function buildCandidateTeammateSuggestions(candidates = [], requiredSkills = []) {
+  const normalizedCandidates = Array.isArray(candidates) ? candidates : [];
+  const required = toLowerSkillSet(requiredSkills);
+  const suggestions = [];
+
+  for (let index = 0; index < normalizedCandidates.length; index += 1) {
+    for (let peerIndex = index + 1; peerIndex < normalizedCandidates.length; peerIndex += 1) {
+      const candidateA = normalizedCandidates[index];
+      const candidateB = normalizedCandidates[peerIndex];
+      const skillsA = toLowerSkillSet(candidateA?.skills || []);
+      const skillsB = toLowerSkillSet(candidateB?.skills || []);
+      const union = new Set([...skillsA, ...skillsB]);
+      const overlapRequired = computeSetIntersectionSize(required, union);
+      const overlapBetweenCandidates = computeSetIntersectionSize(skillsA, skillsB);
+      const complementarity = Math.max(0, union.size - overlapBetweenCandidates);
+      const coverageScore = required.size > 0 ? overlapRequired / required.size : 0;
+      const synergyScore = Number((coverageScore * 0.7 + (complementarity / Math.max(1, union.size)) * 0.3).toFixed(6));
+
+      if (synergyScore <= 0) continue;
+
+      const uncovered = [...required].filter((skill) => !union.has(skill)).slice(0, 5);
+      suggestions.push({
+        pair: [
+          { id: candidateA.id, name: candidateA.name },
+          { id: candidateB.id, name: candidateB.name },
+        ],
+        synergyScore,
+        coveredSkills: [...required].filter((skill) => union.has(skill)).slice(0, 8),
+        uncoveredSkills: uncovered,
+        recommendation:
+          uncovered.length === 0
+            ? 'Strong pair for immediate execution.'
+            : `Strong pair; add one teammate for: ${uncovered.join(', ')}`,
+      });
+    }
+  }
+
+  return suggestions.sort((a, b) => b.synergyScore - a.synergyScore).slice(0, 5);
+}
+
+async function buildEcosystemInsights(currentUserId) {
+  const [projectSnapshot, skillSnapshot, userCount] = await Promise.all([
+    Project.aggregate([
+      {
+        $group: {
+          _id: { $ifNull: ['$category', 'General'] },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { count: -1 } },
+      { $limit: 8 },
+    ]),
+    User.aggregate([
+      { $match: { _id: { $ne: currentUserId } } },
+      { $unwind: { path: '$skills', preserveNullAndEmptyArrays: false } },
+      {
+        $group: {
+          _id: { $toLower: '$skills' },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { count: -1 } },
+      { $limit: 20 },
+    ]),
+    User.countDocuments(),
+  ]);
+
+  return {
+    activeCommunitySize: userCount,
+    topProjectCategories: projectSnapshot.map((item) => ({
+      category: String(item?._id || 'General'),
+      projects: Number(item?.count || 0),
+    })),
+    topCommunitySkills: skillSnapshot.map((item) => ({
+      skill: String(item?._id || '').trim(),
+      users: Number(item?.count || 0),
+    })),
+  };
+}
+
+function buildUserContext(user = {}) {
+  return {
+    id: String(user?._id || ''),
+    name: user?.name || '',
+    role: user?.role || '',
+    skills: Array.isArray(user?.skills) ? user.skills : [],
+    interests: Array.isArray(user?.interests) ? user.interests : [],
+    availabilityStatus: user?.availabilityStatus || '',
+  };
+}
+
+async function buildVirtualCtoPackage({ rawIdea, user }) {
+  const startedAt = Date.now();
+  const cacheKey = buildVirtualCtoCacheKey(user?._id, rawIdea);
+  const cachedPayload = readVirtualCtoCache(cacheKey);
+  if (cachedPayload) {
+    return {
+      ...cachedPayload,
+      meta: {
+        ...(cachedPayload?.meta || {}),
+        cached: true,
+        generatedInMs: Date.now() - startedAt,
+      },
+    };
+  }
+
+  const ecosystemInsights = await buildEcosystemInsights(user?._id);
+  const basePlan = generateVirtualCtoPlan(rawIdea);
+
+  let plan = basePlan;
+  try {
+    plan = await enhancePlanWithLlm(basePlan, rawIdea, {
+      userContext: buildUserContext(user),
+      ecosystemInsights,
+    });
+  } catch (error) {
+    console.error('Virtual CTO LLM enhancement fallback:', error?.message || error);
+  }
+
+  const candidates = await findArchitectCandidates({
+    plan,
+    rawIdea,
+    currentUserId: user?._id,
+    limit: 8,
+  });
+  const teammateSuggestions = buildCandidateTeammateSuggestions(
+    candidates,
+    getPlanRequiredSkills(plan)
+  );
+
+  const payload = {
+    plan,
+    candidates,
+    teammateSuggestions,
+    ecosystemInsights,
+    meta: {
+      generationMode: plan?.generationMode || 'heuristic',
+      requiredSkillsCount: Array.isArray(plan?.requiredSkills) ? plan.requiredSkills.length : 0,
+      candidatesCount: candidates.length,
+      teammatePairSuggestionsCount: teammateSuggestions.length,
+      cached: false,
+      generatedInMs: Date.now() - startedAt,
+    },
+  };
+  writeVirtualCtoCache(cacheKey, payload);
+  return payload;
+}
+
+function writeStreamChunk(res, payload) {
+  res.write(`${JSON.stringify(payload)}\n`);
 }
 
 function toProjectListItem(project, currentUserId = null) {
@@ -352,11 +713,71 @@ router.post('/virtual-cto/plan', protect, async (req, res) => {
       });
     }
 
-    const plan = generateVirtualCtoPlan(rawIdea);
-    return res.status(200).json({ plan });
+    const payload = await buildVirtualCtoPackage({
+      rawIdea,
+      user: req.user,
+    });
+
+    return res.status(200).json(payload);
   } catch (error) {
     console.error('Virtual CTO plan generation error:', error);
     return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// @desc    Stream Virtual CTO plan generation progress and result
+// @route   POST /api/project/virtual-cto/stream
+// @access  Private
+router.post('/virtual-cto/stream', protect, async (req, res) => {
+  const rawIdea = String(req.body?.idea || '').trim();
+  if (!rawIdea) {
+    return res.status(400).json({ error: 'idea is required' });
+  }
+  if (rawIdea.length < 12) {
+    return res.status(400).json({
+      error: 'Please provide a bit more detail so the Virtual CTO can generate a useful plan',
+    });
+  }
+
+  res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  if (typeof res.flushHeaders === 'function') {
+    res.flushHeaders();
+  }
+
+  try {
+    writeStreamChunk(res, { type: 'status', message: 'Analyzing project idea...' });
+    writeStreamChunk(res, { type: 'status', message: 'Building architecture and roadmap...' });
+    const payload = await buildVirtualCtoPackage({
+      rawIdea,
+      user: req.user,
+    });
+    writeStreamChunk(res, { type: 'insights', data: payload.ecosystemInsights || null });
+    writeStreamChunk(res, { type: 'plan', data: payload.plan || null });
+    writeStreamChunk(res, { type: 'candidates', data: payload.candidates || [] });
+    writeStreamChunk(
+      res,
+      { type: 'teammate_suggestions', data: payload.teammateSuggestions || [] }
+    );
+    writeStreamChunk(res, {
+      type: 'status',
+      message:
+        payload?.meta?.cached
+          ? 'Loaded cached result for faster response.'
+          : `Completed in ${payload?.meta?.generatedInMs || 0}ms.`,
+    });
+
+    writeStreamChunk(res, { type: 'done', data: payload });
+    return res.end();
+  } catch (error) {
+    console.error('Virtual CTO stream error:', error);
+    writeStreamChunk(res, {
+      type: 'error',
+      message: error?.message || 'Virtual CTO stream failed',
+    });
+    return res.end();
   }
 });
 

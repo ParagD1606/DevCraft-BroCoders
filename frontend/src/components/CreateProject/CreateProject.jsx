@@ -80,13 +80,13 @@ const CreateProject = () => {
         return { applied: true };
     };
 
-    const architectProjectIdea = async (idea) => {
+    const architectProjectIdea = async (idea, onChunk) => {
         const token = localStorage.getItem('authToken');
         if (!token) {
             throw new Error('You need to be logged in to use Virtual CTO');
         }
 
-        const planResponse = await fetch(`${API_BASE_URL}/api/project/virtual-cto/plan`, {
+        const streamResponse = await fetch(`${API_BASE_URL}/api/project/virtual-cto/stream`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -95,36 +95,85 @@ const CreateProject = () => {
             body: JSON.stringify({ idea }),
         });
 
-        const planData = await planResponse.json();
-        if (!planResponse.ok) {
-            throw new Error(planData.error || 'Failed to generate project blueprint');
-        }
-
-        const plan = planData.plan || {};
-        const applyResult = applyBlueprintToForm(plan);
-
-        let teammates = [];
-        try {
-            const teammateResponse = await fetch(`${API_BASE_URL}/api/user/search-semantic`, {
+        if (!streamResponse.ok || !streamResponse.body) {
+            const planResponse = await fetch(`${API_BASE_URL}/api/project/virtual-cto/plan`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     Authorization: `Bearer ${token}`,
                 },
-                body: JSON.stringify({ queryText: idea }),
+                body: JSON.stringify({ idea }),
             });
-
-            const teammateData = await teammateResponse.json();
-            if (teammateResponse.ok) {
-                teammates = Array.isArray(teammateData.results) ? teammateData.results.slice(0, 6) : [];
+            const planData = await planResponse.json().catch(() => ({}));
+            if (!planResponse.ok) {
+                throw new Error(planData.error || 'Failed to generate project blueprint');
             }
-        } catch (_searchError) {
-            teammates = [];
+            const fallbackPlan = planData.plan || {};
+            const applyResult = applyBlueprintToForm(fallbackPlan);
+            return {
+                plan: fallbackPlan,
+                teammates: Array.isArray(planData.candidates) ? planData.candidates : [],
+                teammateSuggestions: Array.isArray(planData.teammateSuggestions) ? planData.teammateSuggestions : [],
+                ecosystemInsights: planData.ecosystemInsights || null,
+                meta: planData.meta || null,
+                ...applyResult,
+            };
         }
+
+        const reader = streamResponse.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let finalPayload = null;
+
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed) continue;
+
+                let chunk = null;
+                try {
+                    chunk = JSON.parse(trimmed);
+                } catch (_error) {
+                    continue;
+                }
+
+                if (typeof onChunk === 'function') {
+                    onChunk(chunk);
+                }
+
+                if (chunk.type === 'error') {
+                    throw new Error(chunk.message || 'Virtual CTO stream failed');
+                }
+
+                if (chunk.type === 'done') {
+                    finalPayload = chunk.data || null;
+                }
+            }
+        }
+
+        const planData = finalPayload || {};
+        const plan = planData.plan || {};
+        const applyResult = applyBlueprintToForm(plan);
+        const teammates = Array.isArray(planData.candidates) ? planData.candidates : [];
+        const teammateSuggestions = Array.isArray(planData.teammateSuggestions)
+            ? planData.teammateSuggestions
+            : [];
+        const ecosystemInsights = planData.ecosystemInsights || null;
+        const meta = planData.meta || null;
 
         return {
             plan,
             teammates,
+            teammateSuggestions,
+            ecosystemInsights,
+            meta,
             ...applyResult,
         };
     };

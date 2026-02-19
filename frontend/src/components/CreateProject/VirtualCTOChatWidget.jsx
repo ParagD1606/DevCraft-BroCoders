@@ -1,13 +1,17 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+    BarChart3,
     Bot,
     CalendarDays,
     ChevronDown,
+    Layers3,
     Loader2,
     MessageSquareText,
     Send,
     Sparkles,
-    UserRound
+    UserRound,
+    Users2,
+    Zap
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -37,10 +41,17 @@ function getInitials(value) {
     return `${words[0][0] || ''}${words[1][0] || ''}`.toUpperCase();
 }
 
+function toPercent(value) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return null;
+    return `${(numeric * 100).toFixed(1)}%`;
+}
+
 const VirtualCTOChatWidget = ({ onArchitectIdea }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [input, setInput] = useState('');
     const [isThinking, setIsThinking] = useState(false);
+    const [liveStatus, setLiveStatus] = useState('Architecting your project...');
     const [messages, setMessages] = useState([
         {
             id: 1,
@@ -87,9 +98,18 @@ const VirtualCTOChatWidget = ({ onArchitectIdea }) => {
         setIsThinking(true);
 
         try {
-            const result = await onArchitectIdea(idea);
+            const result = await onArchitectIdea(idea, (chunk) => {
+                if (chunk?.type === 'status' && chunk?.message) {
+                    setLiveStatus(chunk.message);
+                }
+            });
             const plan = result?.plan || null;
             const teammates = Array.isArray(result?.teammates) ? result.teammates : [];
+            const teammateSuggestions = Array.isArray(result?.teammateSuggestions)
+                ? result.teammateSuggestions
+                : [];
+            const ecosystemInsights = result?.ecosystemInsights || null;
+            const meta = result?.meta || null;
             const applied = Boolean(result?.applied);
             const overwriteCancelled = result?.reason === 'overwrite_cancelled';
 
@@ -106,6 +126,9 @@ const VirtualCTOChatWidget = ({ onArchitectIdea }) => {
                 text: replyText,
                 plan,
                 teammates,
+                teammateSuggestions,
+                ecosystemInsights,
+                meta,
             });
         } catch (error) {
             appendMessage({
@@ -116,6 +139,7 @@ const VirtualCTOChatWidget = ({ onArchitectIdea }) => {
             });
         } finally {
             setIsThinking(false);
+            setLiveStatus('Architecting your project...');
         }
     };
 
@@ -230,12 +254,62 @@ const VirtualCTOChatWidget = ({ onArchitectIdea }) => {
                                                 <p className="text-[11px] text-slate-600">{message.plan.summary}</p>
                                             ) : null}
 
+                                            <div className="grid grid-cols-2 gap-1.5">
+                                                <div className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[10px] text-slate-700">
+                                                    <div className="inline-flex items-center gap-1">
+                                                        <Layers3 size={11} className="text-blue-600" />
+                                                        Roles
+                                                    </div>
+                                                    <div className="font-semibold text-slate-900 text-[11px]">
+                                                        {(message.plan.roles || []).length}
+                                                    </div>
+                                                </div>
+                                                <div className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[10px] text-slate-700">
+                                                    <div className="inline-flex items-center gap-1">
+                                                        <BarChart3 size={11} className="text-blue-600" />
+                                                        Skills
+                                                    </div>
+                                                    <div className="font-semibold text-slate-900 text-[11px]">
+                                                        {(message.plan.requiredSkills || []).length}
+                                                    </div>
+                                                </div>
+                                                <div className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[10px] text-slate-700">
+                                                    <div className="inline-flex items-center gap-1">
+                                                        <Users2 size={11} className="text-blue-600" />
+                                                        Candidates
+                                                    </div>
+                                                    <div className="font-semibold text-slate-900 text-[11px]">
+                                                        {(message.teammates || []).length}
+                                                    </div>
+                                                </div>
+                                                <div className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[10px] text-slate-700">
+                                                    <div className="inline-flex items-center gap-1">
+                                                        <Zap size={11} className="text-blue-600" />
+                                                        Speed
+                                                    </div>
+                                                    <div className="font-semibold text-slate-900 text-[11px]">
+                                                        {message.meta?.generatedInMs ? `${message.meta.generatedInMs}ms` : 'n/a'}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {message.meta ? (
+                                                <div className="text-[10px] text-slate-500">
+                                                    Mode: {message.meta.generationMode || 'heuristic'}
+                                                    {message.meta.cached ? ' | cached result' : ''}
+                                                </div>
+                                            ) : null}
+
                                             <div className="inline-flex items-center gap-1.5 text-[11px] text-slate-600 bg-white border border-slate-200 rounded-lg px-2 py-1">
                                                 <CalendarDays size={12} className="text-blue-600" />
                                                 {message.plan.startDate} to {message.plan.endDate}
                                             </div>
 
-                                            <div>
+                                            <details className="group" open>
+                                                <summary className="cursor-pointer text-[10px] font-semibold text-slate-600 mb-1 uppercase tracking-wide list-none">
+                                                    <span className="group-open:hidden">Show Recommended Stack</span>
+                                                    <span className="hidden group-open:inline">Hide Recommended Stack</span>
+                                                </summary>
                                                 <div className="text-[10px] font-semibold text-slate-600 mb-1 uppercase tracking-wide">
                                                     Recommended Stack
                                                 </div>
@@ -249,9 +323,13 @@ const VirtualCTOChatWidget = ({ onArchitectIdea }) => {
                                                         </span>
                                                     ))}
                                                 </div>
-                                            </div>
+                                            </details>
 
-                                            <div>
+                                            <details className="group" open>
+                                                <summary className="cursor-pointer text-[10px] font-semibold text-slate-600 mb-1 uppercase tracking-wide list-none">
+                                                    <span className="group-open:hidden">Show Hiring Plan</span>
+                                                    <span className="hidden group-open:inline">Hide Hiring Plan</span>
+                                                </summary>
                                                 <div className="text-[10px] font-semibold text-slate-600 mb-1 uppercase tracking-wide">
                                                     Hiring Plan
                                                 </div>
@@ -266,7 +344,83 @@ const VirtualCTOChatWidget = ({ onArchitectIdea }) => {
                                                         </div>
                                                     ))}
                                                 </div>
-                                            </div>
+                                            </details>
+
+                                            {Array.isArray(message.plan.skillCards) && message.plan.skillCards.length > 0 ? (
+                                                <details className="group">
+                                                    <summary className="cursor-pointer text-[10px] font-semibold text-slate-600 mb-1 uppercase tracking-wide list-none">
+                                                        <span className="group-open:hidden">Show Skill Cards</span>
+                                                        <span className="hidden group-open:inline">Hide Skill Cards</span>
+                                                    </summary>
+                                                    <div className="text-[10px] font-semibold text-slate-600 mb-1 uppercase tracking-wide">
+                                                        Skill Cards
+                                                    </div>
+                                                    <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                                                        {message.plan.skillCards.slice(0, 8).map((card, index) => (
+                                                            <div
+                                                                key={`${card.skill}-${index}`}
+                                                                className="text-[11px] rounded-lg border border-slate-200 bg-white px-2 py-1.5"
+                                                            >
+                                                                <div className="flex items-center justify-between gap-2">
+                                                                    <span className="font-semibold text-slate-800">{card.skill}</span>
+                                                                    <span className={`text-[9px] px-1.5 py-0.5 rounded-md border ${card.priority === 'high'
+                                                                        ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                                                        : 'bg-amber-50 text-amber-700 border-amber-200'
+                                                                        }`}>
+                                                                        {card.priority}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="text-slate-600">{card.whyItMatters}</div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </details>
+                                            ) : null}
+
+                                            {Array.isArray(message.plan.roadmap) && message.plan.roadmap.length > 0 ? (
+                                                <details className="group" open>
+                                                    <summary className="cursor-pointer text-[10px] font-semibold text-slate-600 mb-1 uppercase tracking-wide list-none">
+                                                        <span className="group-open:hidden">Show Roadmap</span>
+                                                        <span className="hidden group-open:inline">Hide Roadmap</span>
+                                                    </summary>
+                                                    <div className="text-[10px] font-semibold text-slate-600 mb-1 uppercase tracking-wide">
+                                                        Roadmap
+                                                    </div>
+                                                    <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                                                        {message.plan.roadmap.map((phase) => (
+                                                            <div
+                                                                key={phase.phase}
+                                                                className="text-[11px] rounded-lg border border-slate-200 bg-white px-2 py-1.5"
+                                                            >
+                                                                <div className="font-semibold text-slate-800">
+                                                                    W{phase.startWeek}-W{phase.endWeek}: {phase.title}
+                                                                </div>
+                                                                <div className="text-slate-600">{phase.objective}</div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </details>
+                                            ) : null}
+
+                                            {message.ecosystemInsights ? (
+                                                <div>
+                                                    <div className="text-[10px] font-semibold text-slate-600 mb-1 uppercase tracking-wide">
+                                                        Ecosystem Signals
+                                                    </div>
+                                                    <div className="text-[11px] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-slate-700">
+                                                        Community size: {message.ecosystemInsights.activeCommunitySize || 0}
+                                                        {Array.isArray(message.ecosystemInsights.topProjectCategories) &&
+                                                        message.ecosystemInsights.topProjectCategories.length > 0 ? (
+                                                            <div className="text-slate-600">
+                                                                Top categories: {message.ecosystemInsights.topProjectCategories
+                                                                    .slice(0, 3)
+                                                                    .map((item) => item.category)
+                                                                    .join(', ')}
+                                                            </div>
+                                                        ) : null}
+                                                    </div>
+                                                </div>
+                                            ) : null}
                                         </div>
                                     ) : null}
 
@@ -290,10 +444,15 @@ const VirtualCTOChatWidget = ({ onArchitectIdea }) => {
                                                             <div className="text-[10px] text-slate-600 truncate">
                                                                 {teammate.role || 'Member'}
                                                             </div>
+                                                            {Array.isArray(teammate.matchedSkills) && teammate.matchedSkills.length > 0 ? (
+                                                                <div className="text-[10px] text-slate-500 truncate">
+                                                                    Skills: {teammate.matchedSkills.slice(0, 3).join(', ')}
+                                                                </div>
+                                                            ) : null}
                                                         </div>
-                                                        {typeof teammate.semanticScore === 'number' ? (
+                                                        {(typeof teammate.matchScore === 'number' || typeof teammate.semanticScore === 'number') ? (
                                                             <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
-                                                                {(teammate.semanticScore * 100).toFixed(1)}%
+                                                                {toPercent(typeof teammate.matchScore === 'number' ? teammate.matchScore : teammate.semanticScore)}
                                                             </span>
                                                         ) : null}
                                                     </div>
@@ -322,6 +481,25 @@ const VirtualCTOChatWidget = ({ onArchitectIdea }) => {
                                             })}
                                         </div>
                                     ) : null}
+
+                                    {Array.isArray(message.teammateSuggestions) && message.teammateSuggestions.length > 0 ? (
+                                        <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-2.5 space-y-2">
+                                            <div className="text-[10px] font-semibold text-slate-600 uppercase tracking-wide">
+                                                Suggested Candidate Pairs
+                                            </div>
+                                            {message.teammateSuggestions.slice(0, 3).map((suggestion, index) => (
+                                                <div
+                                                    key={`pair-${index}`}
+                                                    className="text-[11px] rounded-lg border border-slate-200 bg-white px-2 py-1.5"
+                                                >
+                                                    <div className="font-semibold text-slate-800">
+                                                        {(suggestion.pair || []).map((member) => member?.name).filter(Boolean).join(' + ')}
+                                                    </div>
+                                                    <div className="text-slate-600">{suggestion.recommendation}</div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : null}
                                 </div>
 
                                 {message.role === 'user' ? (
@@ -340,7 +518,7 @@ const VirtualCTOChatWidget = ({ onArchitectIdea }) => {
                                 <div className="max-w-[84%] rounded-2xl px-3 py-2.5 text-sm bg-white text-slate-700 border border-slate-200 shadow-sm">
                                     <div className="inline-flex items-center gap-1.5">
                                         <Loader2 size={13} className="animate-spin text-blue-600" />
-                                        <span>Architecting your project...</span>
+                                        <span>{liveStatus}</span>
                                     </div>
                                 </div>
                             </div>
